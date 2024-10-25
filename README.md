@@ -7,7 +7,7 @@
 Now you can import .JSON Files and edit them.
 You can also export .JSON Files as the Tiny Glade Format.
 
-##How to use the Plugin: [YouTube](https://youtu.be/l3bbmhv0Qi0)
+## How to use the Plugin: [YouTube](https://youtu.be/l3bbmhv0Qi0)
 
 ## At the Moment it's not possible to use the Files in the game!!!
 
