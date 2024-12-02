@@ -54,55 +54,112 @@ class ExportTinyGladeJSON(bpy.types.Operator, ExportHelper):
     """Save the mesh as Tiny Glade JSON"""
     bl_idname = "export_scene.tiny_glade_json"
     bl_label = "Export Tiny Glade JSON"
+    
+    bl_options = {'PRESET'}
+    
+    # Properties for file export
+    filepath: bpy.props.StringProperty(subtype="FILE_PATH",default="untitled.json")
+    filename_ext = ".json"  # Default file extension
 
-    filename_ext = ".json"
-
+    # Export options
+    include_vertex_position: bpy.props.BoolProperty(
+        name="Include Vertex Position",
+        description="Export vertex positions",
+        default=True
+    )
+    include_vertex_color: bpy.props.BoolProperty(
+        name="Include Vertex Color",
+        description="Export vertex colors",
+        default=False
+    )
+    include_vertex_normal: bpy.props.BoolProperty(
+        name="Include Vertex Normal",
+        description="Export vertex normals",
+        default=False
+    )
+    include_faces_indices: bpy.props.BoolProperty(
+        name="Include Faces Indices",
+        description="Export Faces (indices)",
+        default=True
+    )
     def execute(self, context):
+        if not self.filepath.lower().endswith(self.filename_ext):
+           self.filepath += self.filename_ext
         # Get the active mesh
+        self.report({'INFO'}, f"Start Mesh Exportation")
         obj = context.object
         if obj is None or obj.type != 'MESH':
             self.report({'ERROR'}, "Selected object is not a mesh")
             return {'CANCELLED'}
 
         mesh = obj.data
-        angle_radians = math.radians(-90)  # Convert degrees to radians
-        rotation_matrix = Matrix.Rotation(angle_radians, 4, 'X')
+        data = {'attributes': [], 'indices': None}
 
-        # Apply object transformations (scale, rotation, translation) to vertices
-        vertices = [list( rotation_matrix @ obj.matrix_world @ vertex.co) for vertex in mesh.vertices]
-        color_layer = []
+        # Populate data dictionary
+        if self.include_vertex_position:
+            self.add_vertex_positions(obj, mesh, data)
+
+        if self.include_vertex_color:
+            self.add_vertex_colors(mesh, data)
+
+        if self.include_faces_indices:
+            self.add_faces_indices(mesh, data)
+
+        if self.include_vertex_normal:
+            self.add_vertex_normals(mesh, data)
+
+        # Save to file
+        with open(self.filepath, 'w') as f:
+            json.dump(data, f, separators=(',', ':'))
+
+        self.report({'INFO'}, f"Exported data to {self.filepath}")
+        return {'FINISHED'}
+
+    def add_vertex_positions(self, obj, mesh, data):
+        """Add vertex positions to the export data."""
+        angle_radians = math.radians(-90)  # Rotate -90 degrees around the X axis
+        rotation_matrix = Matrix.Rotation(angle_radians, 4, 'X')
+        vertices = [list(rotation_matrix @ obj.matrix_world @ vertex.co) for vertex in mesh.vertices]
+        data['Vertex_Position'] = {'type': ['float', 3], 'buffer': vertices}
+        data['attributes'].append('Vertex_Position')
+
+    def add_vertex_colors(self, mesh, data):
+        """Add vertex colors to the export data."""
         if mesh.vertex_colors:
-            for v in mesh.vertex_colors.active.data:
-                color_layer.append(list(v.color)[:-1])
+            color_layer = [list(loop.color)[:-1] for loop in mesh.vertex_colors.active.data]
+            data['Vertex_Color'] = {'type': ['float', 3], 'buffer': color_layer}
+            data['attributes'].append('Vertex_Color')
+
+    def add_faces_indices(self, mesh, data):
+        """Add face indices to the export data."""
         # Ensure mesh is triangulated
-        bpy.ops.object.mode_set(mode='OBJECT')
-        bpy.ops.object.select_all(action='DESELECT')
-        obj.select_set(True)
-        bpy.context.view_layer.objects.active = obj
         bpy.ops.object.mode_set(mode='EDIT')
         bpy.ops.mesh.select_all(action='SELECT')
         bpy.ops.mesh.quads_convert_to_tris()
         bpy.ops.object.mode_set(mode='OBJECT')
-        vertex_normals = [tuple(v.normal) for v in mesh.vertices]
-        # Collect face indices (ensure triangles)
+
         faces = []
         for poly in mesh.polygons:
-            faces.extend([poly.vertices[0], poly.vertices[1], poly.vertices[2]])
+            faces.extend(poly.vertices[:3])  # Only use the first three vertices (triangles)
+        data['indices'] = {'type': ['int', 1], 'buffer': faces}
 
-        # Build the JSON structure
-        data = {
-            'attributes': ['Vertex_Position', 'Vertex_Normal', 'Vertex_Color'],
-            'indices': {'type': ['int', 1], 'buffer': faces},
-            'Vertex_Position': {'type': ['float', 3], 'buffer': vertices},
-            'Vertex_Normal' : {'type': ['float', 3], 'buffer': vertex_normals},
-            'Vertex_Color': {'type': ['float', 3], 'buffer': color_layer},
-        }
+    def add_vertex_normals(self, mesh, data):
+        """Add vertex normals to the export data."""
+        vertex_normals = [tuple(v.normal) for v in mesh.vertices]
+        data['Vertex_Normal'] = {'type': ['float', 3], 'buffer': vertex_normals}
+        data['attributes'].append('Vertex_Normal')
+    def invoke(self, context, event):
+        context.window_manager.fileselect_add(self)
+        return {'RUNNING_MODAL'}
 
-        # Save to file
-        with open(self.filepath, 'w') as f:
-            json.dump(data, f, indent=4)
-
-        return {'FINISHED'}
+    def draw(self, context):
+        """Defines the layout in the file browser side panel."""
+        layout = self.layout
+        layout.label(text="Export Options:")
+        layout.prop(self, "include_vertex_position")
+        layout.prop(self, "include_faces_indices")
+        layout.prop(self, "include_vertex_normal")
+        layout.prop(self, "include_vertex_color")
 
 # Add the Import/Export menus
 def menu_func_import(self, context):
