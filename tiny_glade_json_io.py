@@ -7,7 +7,8 @@ bl_info = {
 import bpy
 import numpy as np
 import json
-from mathutils import Vector
+from mathutils import Vector, Matrix
+import math
 from bpy_extras.io_utils import ExportHelper, ImportHelper
 
 # Import Operator
@@ -23,8 +24,10 @@ class ImportTinyGladeJSON(bpy.types.Operator, ImportHelper):
         # Open and parse the JSON file
         with open(self.filepath, 'r') as f:
             data = json.load(f)
-        vertex_positions = np.array([Vector(v) for v in data.get("Vertex_Position",{}).get("buffer", [])])
-        vertex_normals = np.array([Vector(v) for v in data.get("Vertex_Normal",{}).get("buffer", [])])
+        angle_radians = math.radians(90)  # Convert degrees to radians
+        rotation_matrix = Matrix.Rotation(angle_radians, 4, 'X')
+        vertex_positions = np.array([rotation_matrix @ Vector(v) for v in data.get("Vertex_Position",{}).get("buffer", [])])
+        vertex_normals = np.array([rotation_matrix @ Vector(v) for v in data.get("Vertex_Normal",{}).get("buffer", [])])
         vertex_colors = data.get("Vertex_Color",{}).get("buffer", [])
         vertex_UV = data.get("Vertex_UV",{}).get("buffer", [])
         indices = data.get("indices",{}).get("buffer", [])
@@ -36,6 +39,7 @@ class ImportTinyGladeJSON(bpy.types.Operator, ImportHelper):
         # Assign geometry to mesh
         mesh.from_pydata(vertex_positions, [], faces)
         mesh.normals_split_custom_set_from_vertices(vertex_normals)
+        mesh.flip_normals()
         if not mesh.vertex_colors:
             mesh.vertex_colors.new()
         color_layer = mesh.vertex_colors.active
@@ -61,12 +65,15 @@ class ExportTinyGladeJSON(bpy.types.Operator, ExportHelper):
             return {'CANCELLED'}
 
         mesh = obj.data
+        angle_radians = math.radians(-90)  # Convert degrees to radians
+        rotation_matrix = Matrix.Rotation(angle_radians, 4, 'X')
 
         # Apply object transformations (scale, rotation, translation) to vertices
-        vertices = [list(obj.matrix_world @ vertex.co) for vertex in mesh.vertices]
+        vertices = [list( rotation_matrix @ obj.matrix_world @ vertex.co) for vertex in mesh.vertices]
         color_layer = []
-        for v in mesh.vertex_colors.active.data:
-            color_layer.append(list(v.color)[:-1])
+        if mesh.vertex_colors:
+            for v in mesh.vertex_colors.active.data:
+                color_layer.append(list(v.color)[:-1])
         # Ensure mesh is triangulated
         bpy.ops.object.mode_set(mode='OBJECT')
         bpy.ops.object.select_all(action='DESELECT')
