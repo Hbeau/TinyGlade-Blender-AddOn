@@ -95,18 +95,18 @@ class ExportTinyGladeJSON(bpy.types.Operator, ExportHelper):
         mesh = obj.data
         data = {'attributes': [], 'indices': None}
 
-        # Populate data dictionary
+        # Populate data dictionary (Order matter!)
         if self.include_vertex_position:
             self.add_vertex_positions(obj, mesh, data)
-
+            
+        if self.include_vertex_normal:
+            self.add_vertex_normals(mesh, data)
+            
         if self.include_vertex_color:
             self.add_vertex_colors(mesh, data)
 
         if self.include_faces_indices:
             self.add_faces_indices(mesh, data)
-
-        if self.include_vertex_normal:
-            self.add_vertex_normals(mesh, data)
 
         # Save to file
         with open(self.filepath, 'w') as f:
