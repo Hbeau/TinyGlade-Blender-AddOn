@@ -5,6 +5,7 @@ bl_info = {
 }
 
 import bpy
+print(bpy.__file__)
 import numpy as np
 import json
 from mathutils import Vector, Matrix
@@ -43,9 +44,13 @@ class ImportTinyGladeJSON(bpy.types.Operator, ImportHelper):
         if not mesh.vertex_colors:
             mesh.vertex_colors.new()
         color_layer = mesh.vertex_colors.active
+        faces_color = []
+        for index in indices :
+            faces_color.append(vertex_colors[index])
         # Assign colors to vertices
         for v in mesh.vertices: 
-            color_layer.data[v.index].color = (*vertex_colors[v.index], 1.0)  # Add alpha value of 1.0
+
+            color_layer.data[v.index].color = (*faces_color[v.index], 1.0)  # Add alpha value of 1.0
         mesh.update()
         return {'FINISHED'}
 
@@ -122,11 +127,25 @@ class ExportTinyGladeJSON(bpy.types.Operator, ExportHelper):
         vertices = [list(rotation_matrix @ obj.matrix_world @ vertex.co) for vertex in mesh.vertices]
         data['Vertex_Position'] = {'type': ['float', 3], 'buffer': vertices}
         data['attributes'].append('Vertex_Position')
-
+    
     def add_vertex_colors(self, mesh, data):
         """Add vertex colors to the export data."""
+       
         if mesh.vertex_colors:
-            color_layer = [list(loop.color)[:-1] for loop in mesh.vertex_colors.active.data]
+            faces = []
+            for poly in mesh.polygons:
+                faces.extend(poly.vertices[:3])
+            colors = [list(loop.color)[:-1] for loop in mesh.vertex_colors.active.data]
+            # Map vertices to their respective colors
+            color_map = {index: colors[i] for i,index in enumerate(faces)}
+            # Extract unique colors and map them back to their vertices
+            seen_colors = {}
+            for index, color in color_map.items():
+                if index not in seen_colors.keys():
+                    seen_colors[index] = tuple(color)
+
+            # Sort by vertex index and get the unique colors
+            color_layer = [color for _, color in sorted(seen_colors.items())]
             data['Vertex_Color'] = {'type': ['float', 3], 'buffer': color_layer}
             data['attributes'].append('Vertex_Color')
 
