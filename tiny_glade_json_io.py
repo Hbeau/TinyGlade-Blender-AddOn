@@ -45,12 +45,23 @@ class ImportTinyGladeJSON(bpy.types.Operator, ImportHelper):
             mesh.vertex_colors.new()
         color_layer = mesh.vertex_colors.active
         faces_color = []
-        for index in indices :
-            faces_color.append(vertex_colors[index])
-        # Assign colors to vertices
-        for v in mesh.vertices: 
+        if vertex_colors:
+            for index in indices :
+                faces_color.append(vertex_colors[index])
+            # Assign colors to vertices
+            for v in mesh.vertices: 
+                color_layer.data[v.index].color = (*faces_color[v.index], 1.0)  # Add alpha value of 1.0
+        if vertex_UV:
+            if not mesh.uv_layers:
+                mesh.uv_layers.new(name="UVMap")  # Create a new UV map if none exists
+            # Access the active UV layer
+            uv_layer = mesh.uv_layers.active.data
 
-            color_layer.data[v.index].color = (*faces_color[v.index], 1.0)  # Add alpha value of 1.0
+            # Apply the UV coordinates to the UV map
+            for poly in mesh.polygons:
+                for loop_idx in poly.loop_indices:
+                    vertex_idx = mesh.loops[loop_idx].vertex_index
+                    uv_layer[loop_idx].uv = vertex_UV[vertex_idx]
         mesh.update()
         return {'FINISHED'}
 
@@ -87,6 +98,12 @@ class ExportTinyGladeJSON(bpy.types.Operator, ExportHelper):
         description="Export Faces (indices)",
         default=True
     )
+
+    include_vertex_uv: bpy.props.BoolProperty(
+        name="Include UV map",
+        description="Export UV map",
+        default=False
+    )
     def execute(self, context):
         if not self.filepath.lower().endswith(self.filename_ext):
            self.filepath += self.filename_ext
@@ -109,6 +126,9 @@ class ExportTinyGladeJSON(bpy.types.Operator, ExportHelper):
             
         if self.include_vertex_color:
             self.add_vertex_colors(mesh, data)
+
+        if self.include_vertex_uv:
+            self.add_vertex_UV(mesh, data)
 
         if self.include_faces_indices:
             self.add_faces_indices(mesh, data)
@@ -167,10 +187,27 @@ class ExportTinyGladeJSON(bpy.types.Operator, ExportHelper):
         vertex_normals = [tuple(v.normal) for v in mesh.vertices]
         data['Vertex_Normal'] = {'type': ['float', 3], 'buffer': vertex_normals}
         data['attributes'].append('Vertex_Normal')
+
+    def add_vertex_UV(self, mesh, data):
+        """Add vertex normals to the export data."""
+        if mesh.uv_layers:
+        # Access the active UV layer
+            uv_layer = mesh.uv_layers.active.data
+        # Extract UV coordinates per loop and map to vertices
+            uv_array = [None] * len(mesh.vertices)  # Initialize a list for UVs
+            for poly in mesh.polygons:
+                for loop_idx in poly.loop_indices:
+                    vertex_idx = mesh.loops[loop_idx].vertex_index
+                    uv_array[vertex_idx] = uv_layer[loop_idx].uv[:]
+
+            # Convert to a 2D array format
+            uv_2d_array = [tuple(uv) for uv in uv_array]
+            data['Vertex_UV'] = {'type': ['float', 2], 'buffer': uv_2d_array}
+            data['attributes'].append('Vertex_UV')
+    
     def invoke(self, context, event):
         context.window_manager.fileselect_add(self)
         return {'RUNNING_MODAL'}
-
     def draw(self, context):
         """Defines the layout in the file browser side panel."""
         layout = self.layout
@@ -179,6 +216,7 @@ class ExportTinyGladeJSON(bpy.types.Operator, ExportHelper):
         layout.prop(self, "include_faces_indices")
         layout.prop(self, "include_vertex_normal")
         layout.prop(self, "include_vertex_color")
+        layout.prop(self, "include_vertex_uv")
 
 # Add the Import/Export menus
 def menu_func_import(self, context):
