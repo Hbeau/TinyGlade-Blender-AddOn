@@ -150,7 +150,6 @@ class ExportTinyGladeJSON(bpy.types.Operator, ExportHelper):
     
     def add_vertex_colors(self, mesh, data):
         """Add vertex colors to the export data."""
-       
         if mesh.vertex_colors:
             faces = []
             for poly in mesh.polygons:
@@ -184,7 +183,9 @@ class ExportTinyGladeJSON(bpy.types.Operator, ExportHelper):
 
     def add_vertex_normals(self, mesh, data):
         """Add vertex normals to the export data."""
+        mesh.flip_normals()
         vertex_normals = [tuple(v.normal) for v in mesh.vertices]
+        mesh.flip_normals()
         data['Vertex_Normal'] = {'type': ['float', 3], 'buffer': vertex_normals}
         data['attributes'].append('Vertex_Normal')
 
@@ -192,16 +193,23 @@ class ExportTinyGladeJSON(bpy.types.Operator, ExportHelper):
         """Add vertex normals to the export data."""
         if mesh.uv_layers:
         # Access the active UV layer
-            uv_layer = mesh.uv_layers.active.data
+            uv_layer =  [uv.uv[:] for uv in mesh.uv_layers.active.data]
         # Extract UV coordinates per loop and map to vertices
             uv_array = [None] * len(mesh.vertices)  # Initialize a list for UVs
+            faces = []
             for poly in mesh.polygons:
-                for loop_idx in poly.loop_indices:
-                    vertex_idx = mesh.loops[loop_idx].vertex_index
-                    uv_array[vertex_idx] = uv_layer[loop_idx].uv[:]
+                faces.extend(poly.vertices[:3])
+            uv_map = {index: uv_layer[i] for i,index in enumerate(faces)}
+            # Extract unique colors and map them back to their vertices
+            seen_uv = {}
+            for index, uv in uv_map.items():
+                if index not in seen_uv.keys():
+                    seen_uv[index] = uv
 
+
+            # Sort by vertex index and get the unique colors
+            uv_2d_array = [uv for _, uv in sorted(seen_uv.items())]
             # Convert to a 2D array format
-            uv_2d_array = [tuple(uv) for uv in uv_array]
             data['Vertex_UV'] = {'type': ['float', 2], 'buffer': uv_2d_array}
             data['attributes'].append('Vertex_UV')
     
