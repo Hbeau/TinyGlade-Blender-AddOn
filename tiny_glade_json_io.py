@@ -142,10 +142,9 @@ class ExportTinyGladeJSON(bpy.types.Operator, ExportHelper):
 
     def add_vertex_positions(self, obj, mesh, data):
         """Add vertex positions to the export data."""
-        angle_radians = math.radians(-90)  # Rotate -90 degrees around the X axis
-        rotation_matrix = Matrix.Rotation(angle_radians, 4, 'X')
-        vertices = [list(rotation_matrix @ obj.matrix_world @ vertex.co) for vertex in mesh.vertices]
-        data['Vertex_Position'] = {'type': ['float', 3], 'buffer': vertices}
+        vertices = [Vector(obj.matrix_world @ vertex.co) for vertex in mesh.vertices]
+        vertices_oriented = [tuple(Vector((-v.x,v.z,v.y))) for v in vertices]
+        data['Vertex_Position'] = {'type': ['float', 3], 'buffer': vertices_oriented}
         data['attributes'].append('Vertex_Position')
     
     def add_vertex_colors(self, mesh, data):
@@ -183,7 +182,7 @@ class ExportTinyGladeJSON(bpy.types.Operator, ExportHelper):
 
     def add_vertex_normals(self, mesh, data):
         """Add vertex normals to the export data."""
-        vertex_normals = [tuple(v.normal.xzy) for v in mesh.vertices]
+        vertex_normals = [tuple(Vector((-v.normal.x, v.normal.z, v.normal.y))) for v in mesh.vertices]
         data['Vertex_Normal'] = {'type': ['float', 3], 'buffer': vertex_normals}
         data['attributes'].append('Vertex_Normal')
 
