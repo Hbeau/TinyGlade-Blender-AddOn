@@ -25,10 +25,8 @@ class ImportTinyGladeJSON(bpy.types.Operator, ImportHelper):
         # Open and parse the JSON file
         with open(self.filepath, 'r') as f:
             data = json.load(f)
-        angle_radians = math.radians(90)  # Convert degrees to radians
-        rotation_matrix = Matrix.Rotation(angle_radians, 4, 'X')
-        vertex_positions = np.array([rotation_matrix @ Vector(v) for v in data.get("Vertex_Position",{}).get("buffer", [])])
-        vertex_normals = np.array([Vector(v).xzy for v in data.get("Vertex_Normal",{}).get("buffer", [])])
+        vertex_positions = np.array([self.__convert_blender_vector(Vector(v)) for v in data.get("Vertex_Position",{}).get("buffer", [])])
+        vertex_normals = np.array([self.__convert_blender_vector(Vector(v)) for v in data.get("Vertex_Normal",{}).get("buffer", [])])
         vertex_colors = data.get("Vertex_Color",{}).get("buffer", [])
         vertex_UV = data.get("Vertex_UV",{}).get("buffer", [])
         indices = data.get("indices",{}).get("buffer", [])
@@ -64,6 +62,8 @@ class ImportTinyGladeJSON(bpy.types.Operator, ImportHelper):
                     uv_layer[loop_idx].uv = vertex_UV[vertex_idx]
         mesh.update()
         return {'FINISHED'}
+    def __convert_blender_vector(self, vector:Vector): 
+        return Vector((-vector.x, vector.z, vector.y))
 
 # Export Operator
 class ExportTinyGladeJSON(bpy.types.Operator, ExportHelper):
@@ -143,7 +143,7 @@ class ExportTinyGladeJSON(bpy.types.Operator, ExportHelper):
     def add_vertex_positions(self, obj, mesh, data):
         """Add vertex positions to the export data."""
         vertices = [Vector(obj.matrix_world @ vertex.co) for vertex in mesh.vertices]
-        vertices_oriented = [tuple(Vector((-v.x,v.z,v.y))) for v in vertices]
+        vertices_oriented = [tuple(self.__convert_tiny_vector(v)) for v in vertices]
         data['Vertex_Position'] = {'type': ['float', 3], 'buffer': vertices_oriented}
         data['attributes'].append('Vertex_Position')
     
@@ -182,7 +182,7 @@ class ExportTinyGladeJSON(bpy.types.Operator, ExportHelper):
 
     def add_vertex_normals(self, mesh, data):
         """Add vertex normals to the export data."""
-        vertex_normals = [tuple(Vector((-v.normal.x, v.normal.z, v.normal.y))) for v in mesh.vertices]
+        vertex_normals = [tuple(self.__convert_tiny_vector(v.normal)) for v in mesh.vertices]
         data['Vertex_Normal'] = {'type': ['float', 3], 'buffer': vertex_normals}
         data['attributes'].append('Vertex_Normal')
 
@@ -209,6 +209,9 @@ class ExportTinyGladeJSON(bpy.types.Operator, ExportHelper):
             # Convert to a 2D array format
             data['Vertex_UV'] = {'type': ['float', 2], 'buffer': uv_2d_array}
             data['attributes'].append('Vertex_UV')
+    
+    def __convert_tiny_vector(self, vector:Vector) : 
+        return Vector((-vector.x, vector.z, vector.y))
     
     def invoke(self, context, event):
         context.window_manager.fileselect_add(self)
