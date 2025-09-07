@@ -57,6 +57,7 @@ class ImportTinyGladeJSON(bpy.types.Operator, ImportHelper):
             appear_pos_mesh.from_pydata(appear_pos, [], [])
         # Assign geometry to mesh
         mesh.from_pydata(vertex_positions, [], faces)
+        mesh.flip_normals()
         # if vertex_normals.size > 0:
          # mesh.normals_split_custom_set(vertex_normals)
         if vertex_colors:
@@ -169,22 +170,9 @@ class ExportTinyGladeJSON(bpy.types.Operator, ExportHelper):
     
     def add_vertex_colors(self, mesh, data):
         """Add vertex colors to the export data."""
-        if mesh.vertex_colors:
-            faces = []
-            for poly in mesh.polygons:
-                faces.extend(poly.vertices[:3])
-            colors = [list(loop.color)[:-1] for loop in mesh.vertex_colors.active.data]
-            # Map vertices to their respective colors
-            color_map = {index: colors[i] for i,index in enumerate(faces)}
-            # Extract unique colors and map them back to their vertices
-            seen_colors = {}
-            for index, color in color_map.items():
-                if index not in seen_colors.keys():
-                    seen_colors[index] = tuple(color)
-
-            # Sort by vertex index and get the unique colors
-            color_layer = [color for _, color in sorted(seen_colors.items())]
-            data['Vertex_Color'] = {'type': ['float', 3], 'buffer': color_layer}
+        if mesh.color_attributes:
+            colors = [list(loop.color)[:-1] for loop in mesh.color_attributes.active.data]
+            data['Vertex_Color'] = {'type': ['float', 3], 'buffer': colors}
             data['attributes'].append('Vertex_Color')
 
     def add_faces_indices(self, mesh, data):
