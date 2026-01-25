@@ -50,7 +50,7 @@ def draw_material_overlay():
         return
     mesh = obj.data
     bm = bmesh.from_edit_mesh(mesh)
-    metal_layer = bm.verts.layers.int.get('is_metal')
+    metal_layer = bm.verts.layers.int.get('is_metal_part')
     glass_layer = bm.verts.layers.int.get('is_glass')
     if not metal_layer and not glass_layer:
         return

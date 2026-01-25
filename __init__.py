@@ -36,7 +36,7 @@ def register():
     )
     bpy.utils.register_class(operators.ImportTinyGladeJSON)
     bpy.utils.register_class(operators.ExportTinyGladeJSON)
-    bpy.utils.register_class(operators.VisualizeMaterialAttributes)
+    #bpy.utils.register_class(operators.VisualizeMaterialAttributes)
     bpy.utils.register_class(operators.ToggleMetalAttribute)
     bpy.utils.register_class(operators.ToggleGlassAttribute)
     bpy.types.TOPBAR_MT_file_import.append(menu_func_import)
@@ -64,7 +64,7 @@ def unregister():
     bpy.types.TOPBAR_MT_file_export.remove(menu_func_export)
     bpy.utils.unregister_class(operators.ImportTinyGladeJSON)
     bpy.utils.unregister_class(operators.ExportTinyGladeJSON)
-    bpy.utils.unregister_class(operators.VisualizeMaterialAttributes)
+    #bpy.utils.unregister_class(operators.VisualizeMaterialAttributes)
     bpy.utils.unregister_class(operators.ToggleMetalAttribute)
     bpy.utils.unregister_class(operators.ToggleGlassAttribute)
     del bpy.types.Scene.show_material_overlay
