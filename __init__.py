@@ -17,7 +17,63 @@ import numpy as np
 import json
 from mathutils import Vector, Matrix
 import math
+import gpu
+from gpu_extras.batch import batch_for_shader
 from bpy_extras.io_utils import ExportHelper, ImportHelper
+
+def update_show_overlay_scene(self, context):
+    for area in bpy.context.screen.areas:
+        if area.type == 'VIEW_3D':
+            space = area.spaces[0]
+            if self.show_material_overlay:
+                try:
+                    if not hasattr(space, 'material_overlay_handler'):
+                        space.material_overlay_handler = space.draw_handler_add(draw_material_overlay, (), 'WINDOW', 'POST_VIEW')
+                except:
+                    pass
+            else:
+                try:
+                    if hasattr(space, 'material_overlay_handler'):
+                        space.draw_handler_remove(space.material_overlay_handler, 'WINDOW')
+                        del space.material_overlay_handler
+                except AttributeError:
+                    pass
+
+def overlay_panel_draw(self, context):
+    layout = self.layout
+    layout.prop(context.scene, "show_material_overlay")
+
+def draw_material_overlay():
+    if not bpy.context.scene.show_material_overlay or bpy.context.mode != 'EDIT_MESH':
+        return
+    obj = bpy.context.edit_object
+    if not obj or obj.type != 'MESH':
+        return
+    mesh = obj.data
+    bm = bmesh.from_edit_mesh(mesh)
+    metal_layer = bm.verts.layers.int.get('is_metal')
+    glass_layer = bm.verts.layers.int.get('is_glass')
+    if not metal_layer and not glass_layer:
+        return
+    print("Drawing material overlay")
+    shader = gpu.shader.from_builtin('FLAT_COLOR')
+    matrix = obj.matrix_world
+    positions = []
+    colors = []
+    for vert in bm.verts:
+        metal = metal_layer and vert[metal_layer] == 1
+        glass = glass_layer and vert[glass_layer] == 1
+        if metal or glass:
+            pos = matrix @ vert.co
+            r = 1 if metal else 0
+            b = 1 if glass else 0
+            g = 0
+            positions.append(pos)
+            colors.append((r, g, b, 1))
+    if positions:
+        batch = batch_for_shader(shader, 'POINTS', {"pos": positions, "color": colors})
+        gpu.state.point_size_set(10)
+        batch.draw(shader)
 
 # Import Operator
 class ImportTinyGladeJSON(bpy.types.Operator, ImportHelper):
@@ -40,6 +96,8 @@ class ImportTinyGladeJSON(bpy.types.Operator, ImportHelper):
         faces = [indices[i:i+3] for i in range(0, len(indices), 3)]
         prim_center = np.array([self.__convert_blender_vector(Vector(v)) for v in data.get("prim_center",{}).get("buffer", [])])
         appear_pos = np.array([self.__convert_blender_vector(Vector(v)) for v in data.get("appear_pos",{}).get("buffer", [])])
+        is_metal = data.get("is_metal",{}).get("buffer", [])
+        is_glass = data.get("is_glass",{}).get("buffer", [])
         # Create a new mesh and object
         objectName = self.filepath.split("\\")[-1].split(".")[0]
         mesh = bpy.data.meshes.new("TinyGladeMesh")
@@ -62,7 +120,7 @@ class ImportTinyGladeJSON(bpy.types.Operator, ImportHelper):
          # mesh.normals_split_custom_set(vertex_normals)
         if vertex_colors:
             colattr = obj.data.color_attributes.new(
-                name='colname',
+                name='Vertex_Color',
                 type='FLOAT_COLOR',
                 domain='POINT',
             )
@@ -72,7 +130,7 @@ class ImportTinyGladeJSON(bpy.types.Operator, ImportHelper):
                 colattr.data[v_index].color = [color[0], color[1], color[2], 1.0]  # Assuming colors are in RGBA format
         if vertex_UV:
             if not mesh.uv_layers:
-                mesh.uv_layers.new(name="UVMap")  # Create a new UV map if none exists
+                mesh.uv_layers.new(name="Vertex_UV")  # Create a new UV map if none exists
             # Access the active UV layer
             uv_layer = mesh.uv_layers.active.data
 
@@ -82,9 +140,63 @@ class ImportTinyGladeJSON(bpy.types.Operator, ImportHelper):
                     vertex_idx = mesh.loops[loop_idx].vertex_index
                     uv_layer[loop_idx].uv = vertex_UV[vertex_idx]
         mesh.update()
+        
+        # Add custom attributes for material flags
+        if is_metal:
+            metal_attr = obj.data.attributes.new(name='is_metal', type='INT', domain='POINT')
+            for i, val in enumerate(is_metal):
+                metal_attr.data[i].value = int(val)
+        
+        if is_glass:
+            glass_attr = obj.data.attributes.new(name='is_glass', type='INT', domain='POINT')
+            for i, val in enumerate(is_glass):
+                glass_attr.data[i].value = int(val)
+        
         return {'FINISHED'}
     def __convert_blender_vector(self, vector:Vector): 
         return Vector((-vector.x, vector.z, vector.y))
+
+# Visualization Operator
+class VisualizeMaterialAttributes(bpy.types.Operator):
+    """Visualize is_metal and is_glass attributes using vertex colors"""
+    bl_idname = "object.visualize_material_attributes"
+    bl_label = "Visualize Material Attributes"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        obj = context.object
+        if obj is None or obj.type != 'MESH':
+            self.report({'ERROR'}, "Selected object is not a mesh")
+            return {'CANCELLED'}
+        
+        mesh = obj.data
+        
+        # Create or get vertex color layer
+        if not mesh.color_attributes:
+            col_attr = mesh.color_attributes.new(name='Material_Viz', type='FLOAT_COLOR', domain='POINT')
+        else:
+            col_attr = mesh.color_attributes.active
+        
+        # Get attributes
+        metal_attr = mesh.attributes.get('is_metal')
+        glass_attr = mesh.attributes.get('is_glass')
+        
+        for i in range(len(mesh.vertices)):
+            r = g = b = 0.0  # Default gray or something
+            
+            if metal_attr:
+                if metal_attr.data[i].value == 1:
+                    r = 1.0  # Red for metal
+            
+            if glass_attr:
+                if glass_attr.data[i].value == 1:
+                    b = 1.0  # Blue for glass
+            
+            col_attr.data[i].color = (r, g, b, 1.0)
+        
+        mesh.update()
+        self.report({'INFO'}, "Material attributes visualized")
+        return {'FINISHED'}
 
 # Export Operator
 class ExportTinyGladeJSON(bpy.types.Operator, ExportHelper):
@@ -125,6 +237,16 @@ class ExportTinyGladeJSON(bpy.types.Operator, ExportHelper):
         description="Export UV map",
         default=False
     )
+    include_is_metal: bpy.props.BoolProperty(
+        name="Include Is Metal",
+        description="Export is_metal attribute",
+        default=False
+    )
+    include_is_glass: bpy.props.BoolProperty(
+        name="Include Is Glass",
+        description="Export is_glass attribute",
+        default=False
+    )
     def execute(self, context):
         if not self.filepath.lower().endswith(self.filename_ext):
            self.filepath += self.filename_ext
@@ -150,6 +272,12 @@ class ExportTinyGladeJSON(bpy.types.Operator, ExportHelper):
 
         if self.include_vertex_uv:
             self.add_vertex_UV(mesh, data)
+
+        if self.include_is_metal:
+            self.add_is_metal(mesh, data)
+
+        if self.include_is_glass:
+            self.add_is_glass(mesh, data)
 
         if self.include_faces_indices:
             self.add_faces_indices(mesh, data)
@@ -223,6 +351,22 @@ class ExportTinyGladeJSON(bpy.types.Operator, ExportHelper):
             data['Vertex_UV'] = {'type': ['float', 2], 'buffer': uv_2d_array}
             data['attributes'].append('Vertex_UV')
     
+    def add_is_metal(self, mesh, data):
+        """Add is_metal attribute to the export data."""
+        if 'is_metal' in mesh.attributes:
+            attr = mesh.attributes['is_metal']
+            values = [int(item.value) for item in attr.data]
+            data['is_metal'] = {'type': ['int', 1], 'buffer': values}
+            data['attributes'].append('is_metal')
+    
+    def add_is_glass(self, mesh, data):
+        """Add is_glass attribute to the export data."""
+        if 'is_glass' in mesh.attributes:
+            attr = mesh.attributes['is_glass']
+            values = [int(item.value) for item in attr.data]
+            data['is_glass'] = {'type': ['int', 1], 'buffer': values}
+            data['attributes'].append('is_glass')
+    
     def __convert_tiny_vector(self, vector:Vector) : 
         return Vector((-vector.x, vector.z, vector.y))
     
@@ -238,6 +382,8 @@ class ExportTinyGladeJSON(bpy.types.Operator, ExportHelper):
         layout.prop(self, "include_vertex_normal")
         layout.prop(self, "include_vertex_color")
         layout.prop(self, "include_vertex_uv")
+        layout.prop(self, "include_is_metal")
+        layout.prop(self, "include_is_glass")
 
 # Add the Import/Export menus
 def menu_func_import(self, context):
@@ -248,13 +394,37 @@ def menu_func_export(self, context):
 
 # Register the add-on
 def register():
+    bpy.types.Scene.show_material_overlay = bpy.props.BoolProperty(
+        name="Material Attributes",
+        description="Show material attributes overlay on active mesh",
+        default=False,
+        update=update_show_overlay_scene
+    )
     bpy.utils.register_class(ImportTinyGladeJSON)
     bpy.utils.register_class(ExportTinyGladeJSON)
+    bpy.utils.register_class(VisualizeMaterialAttributes)
     bpy.types.TOPBAR_MT_file_import.append(menu_func_import)
     bpy.types.TOPBAR_MT_file_export.append(menu_func_export)
+    bpy.types.VIEW3D_PT_overlay.append(overlay_panel_draw)
 
 def unregister():
-    bpy.utils.unregister_class(ImportTinyGladeJSON)
-    bpy.utils.unregister_class(ExportTinyGladeJSON)
+    # Remove draw handlers
+    try:
+        for area in bpy.context.screen.areas:
+            if area.type == 'VIEW_3D':
+                space = area.spaces[0]
+                try:
+                    if hasattr(space, 'material_overlay_handler'):
+                        space.draw_handler_remove(space.material_overlay_handler, 'WINDOW')
+                        del space.material_overlay_handler
+                except AttributeError:
+                    pass
+    except:
+        pass
+    bpy.types.VIEW3D_PT_overlay.remove(overlay_panel_draw)
     bpy.types.TOPBAR_MT_file_import.remove(menu_func_import)
     bpy.types.TOPBAR_MT_file_export.remove(menu_func_export)
+    bpy.utils.unregister_class(ImportTinyGladeJSON)
+    bpy.utils.unregister_class(ExportTinyGladeJSON)
+    bpy.utils.unregister_class(VisualizeMaterialAttributes)
+    del bpy.types.Scene.show_material_overlay
