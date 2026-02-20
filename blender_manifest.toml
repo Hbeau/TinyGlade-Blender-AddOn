@@ -3,9 +3,9 @@ schema_version = "1.0.0"
 # Example of manifest file for a Blender extension
 # Change the values according to your extension
 id = "tiny_glade_blender_addon"
-version = "1.1.0"
+version = "1.2.0"
 name = "Tiny Glade Import/Export"
-tagline = "Transform blender object into meshes that can be imported in Tiny Glade"
+tagline = "Tiny Glade Import/Export"
 maintainer = "Rapunzilla"
 # Supported types: "add-on", "theme"
 type = "add-on"
@@ -15,7 +15,7 @@ type = "add-on"
 
 # Optional list defined by Blender and server, see:
 # https://docs.blender.org/manual/en/dev/advanced/extensions/tags.html
-tags = ["Animation", "Sequencer"]
+tags = ["Import-Export"]
 
 blender_version_min = "4.2.0"
 # # Optional: Blender version that the extension does not support, earlier versions are supported.
@@ -25,7 +25,7 @@ blender_version_min = "4.2.0"
 # License conforming to https://spdx.org/licenses/ (use "SPDX: prefix)
 # https://docs.blender.org/manual/en/dev/advanced/extensions/licenses.html
 license = [
-  "SPDX:GPL-2.0-or-later",
+  "SPDX:GPL-3.0-or-later",
 ]
 # Optional: required by some licenses.
 # copyright = [
@@ -66,8 +66,8 @@ license = [
 # Optional: build settings.
 # https://docs.blender.org/manual/en/dev/advanced/extensions/command_line_arguments.html#command-line-args-extension-build
 # [build]
-# paths_exclude_pattern = [
-#   "__pycache__/",
-#   "/.git/",
-#   "/*.zip",
-# ]
+ paths_exclude_pattern = [
+   "__pycache__/",
+   "/.git/",
+   "/*.zip",
+ ]
