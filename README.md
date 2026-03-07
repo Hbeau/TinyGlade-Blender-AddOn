@@ -4,7 +4,10 @@
 1. Download the "tiny_glade_json_io.py"
 2. Open Blender go to -> Edit -> Preferences -> Add-ons -> top right arrow down button -> Install from Disk -> select "tiny_glade_json_io.py" -> click "Install from Disk" bottom right
 ## Usage
-Now you can import .JSON Files and edit them.
+Now you can import .JSON Files and edit them.  
+Alongside standard meshes, there is a new **Import Type** selector in the file browser: choose **Tree** when loading tree files so that the vertex‑color data is split into a UV map (x/y) and a canopy flag (z).  
+*Note:* the file format uses **1 = trunk, 0 = canopy**; the add‑on automatically flips this to the internal canopy flag.  
+The mesh edit vertex context menu (right‑click) also includes toggles for **Metal**, **Glass** and the new **Canopy** boolean attributes.  
 You can also export .JSON Files as the Tiny Glade Format.
 
 ## How to use the Plugin: [YouTube](https://youtu.be/l3bbmhv0Qi0)

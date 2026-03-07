@@ -20,24 +20,14 @@ def flip_vector_orientation(vector: Vector) -> Vector:
     """Convert a vector from Tiny Glade coordinates to Blender coordinates."""
     return Vector((-vector.x, vector.z, vector.y))
 
-def pre_export_pipeline(context: bpy.types.Context, obj: "bpy.types.Object"):
-    """Create a non-destructive evaluated, triangulated mesh for export.
 
-    Applies modifiers (including edge split) to a single object, converts color 
-    attributes to vertex colors, and triangulates.
-
-    Returns (temp_mesh, meta) where `temp_mesh` is a new bpy.data.meshes entry
-    containing the evaluated and triangulated geometry, and `meta` is 
-    a dict with mapping helpers (currently includes `loop_to_vertex_map`).
-
-    This function always applies modifiers and triangulates.
-    The caller is responsible for removing `temp_mesh` from `bpy.data.meshes`.
+def apply_edge_split(context: bpy.types.Context, obj: "bpy.types.Object"):
+    """Create a temporary object with edge split modifier applied and return evaluated mesh.
+    
+    Returns (temp_obj, obj_eval, eval_mesh) where temp_obj is the temporary object,
+    obj_eval is the evaluated object, and eval_mesh is the evaluated mesh.
+    The caller is responsible for cleaning up temp_obj and obj_eval.
     """
-    depsgraph = context.evaluated_depsgraph_get()
-    
-    if obj is None or obj.type != 'MESH':
-        raise ValueError("Object must be a mesh object")
-    
     # Create a temporary copy of the object for non-destructive processing
     temp_obj = obj.copy()
     temp_obj.data = obj.data.copy()
@@ -63,25 +53,40 @@ def pre_export_pipeline(context: bpy.types.Context, obj: "bpy.types.Object"):
         except Exception:
             eval_mesh = temp_obj.data.copy()
     
-    # Convert color attributes from CORNER to per-vertex format
-    if eval_mesh.color_attributes:
-        for color_attr in eval_mesh.color_attributes:
-            if color_attr.domain == 'CORNER':
-                # Create new per-vertex color attribute
-                vertex_color = eval_mesh.color_attributes.new(
-                    name=color_attr.name + "_vertex",
-                    type='FLOAT_COLOR',
-                    domain='POINT'
-                )
-                
-                # Map corner colors to first-seen per-vertex
-                for loop_idx, loop in enumerate(eval_mesh.loops):
-                    v_idx = loop.vertex_index
-                    corner_color = color_attr.data[loop_idx].color
-                    # Only set if not already set (first-seen)
-                    if all(vertex_color.data[v_idx].color[i] == 0.0 for i in range(4)):
-                        vertex_color.data[v_idx].color = corner_color
+    return temp_obj, obj_eval, eval_mesh
+
+
+def pre_export_pipeline(context: bpy.types.Context, obj: "bpy.types.Object"):
+    """Create a non-destructive evaluated, triangulated mesh for export.
+
+    Applies modifiers (including edge split) to a single object, converts color 
+    attributes to vertex colors, and triangulates.
+
+    Returns (temp_mesh, meta) where `temp_mesh` is a new bpy.data.meshes entry
+    containing the evaluated and triangulated geometry, and `meta` is 
+    a dict with mapping helpers (currently includes `loop_to_vertex_map`).
+
+    This function always applies modifiers and triangulates.
+    The caller is responsible for removing `temp_mesh` from `bpy.data.meshes`.
+    """
+    if obj is None or obj.type != 'MESH':
+        raise ValueError("Object must be a mesh object")
     
+    temp_obj, obj_eval, eval_mesh = apply_edge_split(context, obj)
+    
+    bm = bmesh.new()   # create an empty BMesh
+    bm.from_mesh(eval_mesh)   # fill it in from a Mesh
+
+    # Créer une liste pour stocker les positions des vertices
+    verts_positions = []
+
+    # Parcourir toutes les faces et ajouter un vertex au centre de chaque face
+    for vert in bm.verts:
+        for face in vert.link_faces:
+            center = face.calc_center_median()
+            verts_positions.append(center)
+            break
+
     # Triangulate the mesh
     bm = bmesh.new()
     bm.from_mesh(eval_mesh)
@@ -103,7 +108,28 @@ def pre_export_pipeline(context: bpy.types.Context, obj: "bpy.types.Object"):
     
     # Build simple metadata: loop -> vertex map for first-seen mapping
     loop_to_vertex_map = [loop.vertex_index for loop in temp_mesh.loops]
-    meta = {"loop_to_vertex_map": loop_to_vertex_map}
     
-    return temp_mesh, meta
+    return temp_mesh
+
+
+def vertex_positions_data(obj: "bpy.types.Object", mesh: "bpy.types.Mesh"):
+    """Return a list of oriented vertex position tuples for export.
+
+    Applies the object's world matrix before flipping coordinate orientation.
+    """
+    vertices = [Vector(obj.matrix_world @ vertex.co) for vertex in mesh.vertices]
+    return [tuple(flip_vector_orientation(v)) for v in vertices]
+
+
+def vertex_normals_data(mesh: "bpy.types.Mesh"):
+    """Return a list of oriented vertex normal tuples."""
+    return [tuple(flip_vector_orientation(v.normal)) for v in mesh.vertices]
+
+
+def faces_indices_data(mesh: "bpy.types.Mesh"):
+    """Return a flat list of triangle indices from a triangulated mesh."""
+    faces = []
+    for poly in mesh.polygons:
+        faces.extend(poly.vertices[:3])
+    return faces
     

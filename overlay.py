@@ -52,7 +52,8 @@ def draw_material_overlay():
     bm = bmesh.from_edit_mesh(mesh)
     metal_layer = bm.verts.layers.int.get('is_metal_part')
     glass_layer = bm.verts.layers.int.get('is_glass')
-    if not metal_layer and not glass_layer:
+    canopy_layer = bm.verts.layers.int.get('is_canopy')
+    if not metal_layer and not glass_layer and not canopy_layer:
         return
     shader = gpu.shader.from_builtin('FLAT_COLOR')
     matrix = obj.matrix_world
@@ -61,11 +62,12 @@ def draw_material_overlay():
     for vert in bm.verts:
         metal = metal_layer and vert[metal_layer] == 1
         glass = glass_layer and vert[glass_layer] == 1
-        if metal or glass:
+        canopy = canopy_layer and vert[canopy_layer] == 1
+        if metal or glass or canopy:
             pos = matrix @ vert.co
             r = 1 if metal else 0
             b = 1 if glass else 0
-            g = 0
+            g = 1 if canopy else 0
             positions.append(pos)
             colors.append((r, g, b, 1))
     if positions:
