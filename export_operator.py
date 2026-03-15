@@ -61,13 +61,20 @@ class ExportTinyGladeJSON(bpy.types.Operator, ExportHelper):
     )
     include_is_metal_part: bpy.props.BoolProperty(
         name="Include Is Metal",
-        description="Export is_metal_part attribute",
+        description="Export is_metal_part attribute, used in doors and trapdoors",
         default=False
     )
     include_is_glass: bpy.props.BoolProperty(
         name="Include Is Glass",
-        description="Export is_glass attribute",
+        description="Export is_glass attribute, usefull for windows",
         default=False
+    )
+    enable_preprocessing: bpy.props.BoolProperty(
+        name="Enable Pre-processing",
+        description="Enable pre-processing pipeline to apply 'edge split' and 'triangulation' before export." \
+        "Disable it if you want to export raw mesh data without modifications.",
+        default=True
+
     )
 
     def execute(self, context):
@@ -78,8 +85,11 @@ class ExportTinyGladeJSON(bpy.types.Operator, ExportHelper):
             return {'CANCELLED'}
         if not self.filepath.lower().endswith(self.filename_ext):
            self.filepath += obj.name + self.filename_ext
-        # Prepare an evaluated, triangulated mesh (non-destructive)
-        mesh = pre_export_pipeline(context, obj)
+        # Prepare an evaluated, triangulated mesh (non-destructive) if pre-processing is enabled
+        if self.enable_preprocessing:
+            mesh = pre_export_pipeline(context, obj)
+        else:
+            mesh = obj.data
         data = {'attributes': [], 'indices': None}
 
         # Populate data dictionary (Order matter!)
@@ -149,8 +159,8 @@ class ExportTinyGladeJSON(bpy.types.Operator, ExportHelper):
 
     def add_vertex_colors(self, mesh, data):
         """Add vertex colors to the export data."""
-        if mesh.color_attributes and mesh.color_attributes.active:
-            attr = mesh.color_attributes.active
+        if mesh.color_attributes and mesh.color_attributes.values()[0] is not None:
+            attr = mesh.color_attributes.values()[0]
             # Map corner/loop colors to first-seen per-vertex colors (Option A)
             print(f"Exporting vertex colors from attribute: {attr}")
             vertex_colors = [None] * len(mesh.vertices)
@@ -233,11 +243,27 @@ class ExportTinyGladeJSON(bpy.types.Operator, ExportHelper):
     def draw(self, context):
         """Defines the layout in the file browser side panel."""
         layout = self.layout
-        layout.label(text="Export Options:")
-        layout.prop(self, "include_vertex_position")
-        layout.prop(self, "include_faces_indices")
-        layout.prop(self, "include_vertex_normal")
-        layout.prop(self, "include_vertex_color")
-        layout.prop(self, "include_vertex_uv")
-        layout.prop(self, "include_is_metal_part")
-        layout.prop(self, "include_is_glass")
+        
+        # Pre-processing section
+        box = layout.box()
+        box.label(text="Pre-processing:")
+        box.prop(self, "enable_preprocessing")
+        
+        # Export Options section
+        box = layout.box()
+        box.label(text="Export Options:")
+        
+        # Geometry subsection
+        subbox = box.box()
+        subbox.label(text="Attributes:")
+        subbox.prop(self, "include_vertex_position")
+        subbox.prop(self, "include_faces_indices")
+        subbox.prop(self, "include_vertex_normal")
+        subbox.prop(self, "include_vertex_color")
+        subbox.prop(self, "include_vertex_uv")
+        
+        # Attributes subsection
+        subbox = box.box()
+        subbox.label(text="Door/Windows:")
+        subbox.prop(self, "include_is_metal_part")
+        subbox.prop(self, "include_is_glass")

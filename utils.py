@@ -130,6 +130,7 @@ def faces_indices_data(mesh: "bpy.types.Mesh"):
     """Return a flat list of triangle indices from a triangulated mesh."""
     faces = []
     for poly in mesh.polygons:
-        faces.extend(poly.vertices[:3])
+        tri = [poly.vertices[0], poly.vertices[2], poly.vertices[1]]
+        faces.extend(tri)
     return faces
     
