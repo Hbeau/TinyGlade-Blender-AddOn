@@ -108,8 +108,7 @@ class ImportTinyGladeJSON(bpy.types.Operator, ImportHelper):
                 domain='POINT',
             )
             for v_index in range(len(obj.data.vertices)):
-                color = vertex_colors[v_index] 
-                print(f"Color for vertex {v_index}: {color}")
+                color = vertex_colors[v_index]
                 colattr.data[v_index].color = [color[0], color[1], color[2], 1.0]  # Assuming colors are in RGBA format
 
         if vertex_UV and self.import_type != 'TREE':

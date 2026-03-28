@@ -19,6 +19,8 @@ from . import tree_export_operator
 from . import toggle_attributes
 from . import generate_meshes
 from . import overlay
+from . import addon_preferences
+from . import mesh_presets
 
 def menu_func_vertex(self, context):
     self.layout.operator(toggle_attributes.ToggleMetalAttribute.bl_idname, text="Toggle Metal")
@@ -34,8 +36,22 @@ def menu_func_export(self, context):
     self.layout.operator(export_operator.ExportTinyGladeJSON.bl_idname, text="Tiny Glade JSON (.json)")
     self.layout.operator(tree_export_operator.ExportTinyGladeTreeJSON.bl_idname, text="Tiny Glade Tree JSON (.json)")
 
+
+def init_presets():
+    """Initialize mesh presets from embedded data"""
+    try:
+        manager = mesh_presets.get_preset_manager()
+        return manager.load()
+    except Exception as e:
+        print(f"Failed to initialize presets: {e}")
+        return False
+
+
 # Register the add-on
 def register():
+    # Register addon preferences first
+    bpy.utils.register_class(addon_preferences.TinyGladeAddonPreferences)
+    
     bpy.types.Scene.show_material_overlay = bpy.props.BoolProperty(
         name="Material Attributes",
         description="Show material attributes overlay on active mesh",
@@ -54,6 +70,9 @@ def register():
     bpy.types.TOPBAR_MT_file_export.append(menu_func_export)
     bpy.types.VIEW3D_PT_overlay_edit_mesh.append(overlay.overlay_panel_draw)
     bpy.types.VIEW3D_MT_edit_mesh_vertices.append(menu_func_vertex)
+    
+    # Initialize presets
+    init_presets()
 
 def unregister():
     # Remove draw handlers
@@ -81,4 +100,5 @@ def unregister():
     bpy.utils.unregister_class(toggle_attributes.ToggleCanopyAttribute)
     bpy.utils.unregister_class(generate_meshes.GenerateAppearPosMesh)
     bpy.utils.unregister_class(generate_meshes.GeneratePrimCenterMesh)
+    bpy.utils.unregister_class(addon_preferences.TinyGladeAddonPreferences)
     del bpy.types.Scene.show_material_overlay
