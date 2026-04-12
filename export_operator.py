@@ -21,6 +21,31 @@ from .utils import flip_vector_orientation, pre_export_pipeline, vertex_position
 from .mesh_presets import get_preset_manager
 
 
+# Global storage for popover data (workaround for context.scene limitation during drawing)
+_popover_data = {}
+
+
+# Popover Panel for Full Mesh List
+class EXPORT_PT_MeshListPopover(bpy.types.Panel):
+    """Panel showing the full list of meshes in a popover"""
+    bl_space_type = 'FILE_BROWSER'
+    bl_region_type = 'WINDOW'
+    bl_label = "Full Mesh List"
+    bl_idname = "EXPORT_PT_mesh_list_popover"
+    
+    def draw(self, context):
+        layout = self.layout
+        meshes = _popover_data.get('remaining_meshes', [])
+        if meshes:
+            layout.label(text="Additional Meshes:")
+            col = layout.column()
+            col.scale_y = 0.75
+            for mesh in meshes:
+                col.label(text=f"  {mesh}")
+        else:
+            layout.label(text="No additional meshes")
+
+
 # Export Operator
 class ExportTinyGladeJSON(bpy.types.Operator, ExportHelper):
     """Save the mesh as Tiny Glade JSON"""
@@ -231,7 +256,9 @@ class ExportTinyGladeJSON(bpy.types.Operator, ExportHelper):
                 for mesh_item in meshes[:10]:
                     col.label(text=f"    {mesh_item}")
                 if len(meshes) > 10:
-                    col.label(text=f"    ... +{len(meshes) - 10} more")
+                    _popover_data['remaining_meshes'] = meshes[10:]
+                    row = col.row()
+                    row.popover(panel="EXPORT_PT_mesh_list_popover", text=f"    ... +{len(meshes) - 10} more")
             elif self.selector_mode == 'MESH' and detail_box is not None:
                 preset_info = manager.get_preset_for_mesh(selected_item)
                 if preset_info:
@@ -473,5 +500,4 @@ class ExportTinyGladeJSON(bpy.types.Operator, ExportHelper):
     def invoke(self, context, event):
         context.window_manager.fileselect_add(self)
         return {'RUNNING_MODAL'}
-    
     

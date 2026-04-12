@@ -58,6 +58,7 @@ def register():
         default=False,
         update=overlay.update_show_overlay_scene
     )
+    bpy.utils.register_class(export_operator.EXPORT_PT_MeshListPopover)
     bpy.utils.register_class(import_operator.ImportTinyGladeJSON)
     bpy.utils.register_class(export_operator.ExportTinyGladeJSON)
     bpy.utils.register_class(tree_export_operator.ExportTinyGladeTreeJSON)
@@ -92,6 +93,7 @@ def unregister():
     bpy.types.VIEW3D_MT_edit_mesh_vertices.remove(menu_func_vertex)
     bpy.types.TOPBAR_MT_file_import.remove(menu_func_import)
     bpy.types.TOPBAR_MT_file_export.remove(menu_func_export)
+    bpy.utils.unregister_class(export_operator.EXPORT_PT_MeshListPopover)
     bpy.utils.unregister_class(import_operator.ImportTinyGladeJSON)
     bpy.utils.unregister_class(export_operator.ExportTinyGladeJSON)
     bpy.utils.unregister_class(tree_export_operator.ExportTinyGladeTreeJSON)

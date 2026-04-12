@@ -39,6 +39,19 @@ class ExportTinyGladeTreeJSON(bpy.types.Operator, ExportHelper):
         description="Select which mesh object to use as source for prim_center",
         default=""
     )
+    age_enable: bpy.props.BoolProperty(
+        name="Age",
+        description="Add age attribute with value 0.5",
+        default=False
+    )
+
+    age: bpy.props.FloatProperty(
+        name="Age",
+        description="Age value for the attribute (0 to 1)",
+        default=0.5,
+        min=0.0,
+        max=1.0
+    )
 
     def execute(self, context):
         self.report({'INFO'}, "Start Tree Mesh Exportation")
@@ -65,6 +78,10 @@ class ExportTinyGladeTreeJSON(bpy.types.Operator, ExportHelper):
 
             # prim_center: compute primitive/face centers for this mesh
             self.add_prim_center(data)
+
+            # age: add age attribute if flag is set
+            if self.age_enable:
+                self.add_age(mesh, data)
 
             # Also include indices for geometry consumers
             self.add_faces_indices(mesh, data)
@@ -184,6 +201,14 @@ class ExportTinyGladeTreeJSON(bpy.types.Operator, ExportHelper):
         except KeyError:
             pass
 
+    def add_age(self, mesh, data):
+        """Add age attribute with the selected value per vertex."""
+        data['age'] = {
+            'type': ['float', 1],
+            'buffer': [self.age] * len(mesh.vertices),
+        }
+        data['attributes'].append('age')
+
     def invoke(self, context, event):
         context.window_manager.fileselect_add(self)
         return {'RUNNING_MODAL'}
@@ -195,3 +220,6 @@ class ExportTinyGladeTreeJSON(bpy.types.Operator, ExportHelper):
         layout.prop_search(self, "appear_pos_source_mesh", context.scene, "objects", text="Appear Pos Source Mesh")
         
         layout.prop_search(self, "prim_center_source_mesh", context.scene, "objects", text="Prim Center Source Mesh")
+        layout.prop(self, "age_enable", text="Include Age Attribute")
+        if self.age_enable:
+            layout.prop(self, "age")
