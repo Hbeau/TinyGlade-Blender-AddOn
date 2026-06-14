@@ -1,14 +1,11 @@
 <h1 align="center"> Tiny Glade Blender Add-On</h1>
 <p align="center">
-  Edit the game models with ease
+  Edit Tiny Glade models in Blender
   <br>
-  <a href="https://getbootstrap.com/docs/5.3/"><strong>See the full documentation</strong></a>
+  <a href="https://hbeau.github.io/tiny-docs/"><strong>See the full documentation</strong></a>
   <br>
   <br>
 </p>  
-
-The **Tiny Glade Blender Add-On** lets you easily **import and export** [Tiny Glade mesh files](../game-knowledge/meshes.md) (`.json`) for editing in [Blender](https://www.blender.org/).
-
 ---
 
 ## Installation
@@ -24,25 +21,47 @@ The **Tiny Glade Blender Add-On** lets you easily **import and export** [Tiny Gl
 4. Choose the downloaded `tiny_glade_blender_addon.zip` file and click **Install from Disk** (bottom right).  
 5. **Enable** the add-on by checking its box in the add-ons list.  
 
----
-
 ## Importing Tiny Glade Meshes
 
 1. In Blender, go to **File → Import → Tiny Glade JSON (.json)**.
 2. Select your mesh file and click **Import**.
-![import window](import.jpg)
+3. if you will to import a tree, chose the right option on top right
 
-Your object will appear in Blender as **"Tiny Glade Object"**.
+Your object will appear in Blender as with it name like  **"lantern_terrain"**.
+
+### **Supported features:**
+The **Normal Mesh**(well named in oppostion of tree mesh) import support most of the attribute : `Vertex_Position` , `Vertex_Color`, `Vertex_Normal`, `UV_map` and flags like `is_metal_part`, `is_glass` and `is_tip`
+that's include every decorator, every clutter and most of the static meshes.  
+!!! info
+    Birds and ducks are not yet supported. you can still import them but some feature will be missing
+
+the **Trees** import use a different pipeline. it will import the color correclty by spliting `UV_Map` from the canopy flag. It also import `prim_center` and `appear_pos` in separated meshes
 
 ---
 
+## Exporting Tiny Glade Meshes
+### Normal Meshes
+Mesh export will convert your blender object into a JSON file readable in the game. Not every meshes work the same way, there are a lots of differents shaders that require differents properties.  
+The export tool will guide you in the export and ddo a lot of work for you. To export follow the steps below :  
+
+
+1. Select your object in **Object Mode**.
+2. Go to **File → Export → Tiny Glade JSON (.json)**.
+3. Choose a file name matching the asset you want to replace.
+4. Select in the right panel the export settings
+  a. the pre-process pipeline will do a bunch of operation for you : apply modifiers,split edges, triangulate. leave it enable unless you know what you are doing
+  b. select a shader or a specific mesh to load the preset of attributes to export.if you're brave enough, use the manual option to select attributes by yourself.
+5. Click on the export button and get your file 🎉
+
+### Trees meshes
+Tree meshes also require a special export pipeline. you find the export window in  **File → Export → Tiny Glade Tree JSON (.json)**.
+the export windows look pretty the same as the normal mesh export window, but it will ask you to add two extra meshes for the `appear_pos` and `prim_center` attributes.
+The `age` attribute is required for some trees, toggle the option if needed. (by default the age is set to 0.5, you can change it with the slider).
+
+
+
 ## Modeling Tips
-### Triangulate faces
-**Why:** Tiny Glade expects *triangles*. Quads or n-gons can cause incorrect color mapping and rendering artifacts. 
-**How:**     
-- Enter *Edit Mode*: select the whole mesh (`A`).  
-- Press `Ctrl+T` or use `Mesh → Faces → Triangulate Faces` to convert faces to triangles.  
-- For a non‑destructive workflow, add a *Triangulate* modifier (Object `Properties → Modifiers → Add Modifier → Triangulate`) — then **apply it before export**.  
+
 
 ### **Apply vertex colors**
 **Why:** The game reads per-vertex color data. Paint on the final (triangulated) mesh so colors align with exported vertices.  
@@ -52,7 +71,8 @@ Your object will appear in Blender as **"Tiny Glade Object"**.
 - Use the Paint tools or *Bucket Fill* to paint the mesh. Use Fill for a quick base color.  
 - Verify the color layer is active and saved before export.  
 
->    In recent Blender versions vertex colors are stored as *color attributes*. Ensure the attribute name is preserved in export.
+!!! info
+    In recent Blender versions vertex colors are stored as *color attributes*. Ensure the attribute name is preserved in export.
 
 ### **Check normals**
 **Why:** Normals determine surface orientation for lighting; inverted normals produce dark or transparent appearances in‑game.  
@@ -61,15 +81,21 @@ Your object will appear in Blender as **"Tiny Glade Object"**.
 - To flip specific faces, select them and use `Mesh → Normals → Flip`.  
 - Visualize normals via *Overlays → Face Orientation* or enable normal display in *Viewport Overlays*.  
 
-**Notes:**
-- If your shader relies on split normals, either clear custom split normals (`Mesh → Normals → Clear Custom Split Normals Data`) or export proper normal data.
 
 ### **Split edges (preserve sharp edges)**
+_by default, the export tool will split edges for you, but if you want to do it manually, here is how to do it._
 **Why:** Sharp edges often require duplicated vertices so normals and vertex colors don’t interpolate across a hard seam.  
 **How:**  
 - Option 1 (modifier): In *Object Mode* add an *Edge Split* modifier (`Modifiers → Add Modifier → Edge Split`), choose *Sharp Edges* or angle threshold, then **Apply**.  
 - Option 2 (mark sharp): In *Edit Mode*, select edges → `Edge → Mark Sharp`, then enable *Auto Smooth* (`Object Data Properties → Normals → Auto Smooth`) or apply *Edge Split*.  
-
+<div markdown="span" style="display:flex">
+<figure style="margin:0" markdown="span">
+  ![No Edge Split](./exemple_no_edge_split.JPG){style="max-width:320px;height:auto;display:block}
+</figure>
+<figure style="margin:0" markdown="span">
+  ![Edge Split](./exemple_edge_split.JPG){style="max-width:320px;height:auto;display:block}
+</figure>
+</div>
 <p style="text-align:center;font-style:italic;margin-top:0.5rem;font-size:0.7rem">Edge Split preserves hard seams so normals and vertex colors don't interpolate across the edge — prevents color bleeding and shading artifacts.</p>
 
 ### **Paint every vertex**
@@ -77,37 +103,8 @@ Your object will appear in Blender as **"Tiny Glade Object"**.
 **How:**  
 - After triangulating and splitting edges, enter *Vertex Paint* and do a complete fill (Bucket Fill) to set a color for every vertex.  
 - Verify vertex count and color layer length match: open the object’s *Color Attributes* and confirm the layer exists and covers the mesh.  
-- As a final check, export a test JSON and inspect the color arrays or re-import to verify no vertex is uncolored.  
-
-### **Quick checklist before exporting**
-- Mesh is **triangulated** and modifiers **applied**.  
-- Vertex color layer **exists** and is **active**.  
-- Normals face outward (`Shift+N`) or flipped where appropriate.  
-- Edge Split or equivalent **applied** for sharp seams.  
-
-!!! danger
-    **Missing vertex colors will crash the game!**  
-    Always ensure every vertex is painted.
 
 ---
-
-## Exporting Tiny Glade Meshes
-
-1. Select your object in **Object Mode**.
-2. Go to **File → Export → Tiny Glade JSON (.json)**.
-3. Choose a file name matching the asset you want to replace.
-4. In the right panel, select the required attributes for your mesh.
-> Export change the order of vertex and faces, that can cause trouble especially when you animate sheep
-
----
-
-## Video Tutorial
-
-Watch this step-by-step video by JSK for a full walkthrough:
-
-<div align="center">
-<iframe width="560" height="315" src="https://www.youtube.com/embed/0-j9FaxsRGE?si=H5yMLdaPEZ3J2YAw" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
-</div>
 
 ---
 ## Troubleshooting
@@ -133,8 +130,8 @@ The two most common causes are:
   ```
   **Solution:**  
   Make sure your mesh includes all required attributes in the export windows 
-
-  > If the atribute is not in the export windows you can try to add it manually in the json file
+!!!Info
+    If the atribute is not in the export windows you can try to add it manually in the json file
 
 - **Unpainted vertices:**  
   If any vertex is missing a color, the game will crash.
@@ -147,20 +144,22 @@ The two most common causes are:
 
 ---
 
-### 2. Colors Are Incorrectly Placed
+### 2. N-gons
+Be careful to N-gons, they are faces with more than four sides, they can appear in the mesh when you bevel edges or add cylinders for example. if you leave N-gons, the triangulation will be unpredictable and will cause problems in the game.  
 
-If your mesh has strange or misplaced colors, it’s usually because the original object had quad faces instead of triangles.
+<br><br><br>
 
-![cube quad](cube_paint.jpg)
-
-**Solution:**  
-Always triangulate faces before painting colors.  
-Go to **Edit Mode → Select All → Faces → Triangulate Faces**.
+To find n-gons in your mesh, go to **Edit Mode → Select → Select All by Trait Faces by Sides** and choose **Greater Than 4**. make sure to be in **Select Mode : Face**.
+After that, you can either delete the face and fill it with quads.
+You don't need to triangulate the mesh, the export tool will do it for you unless if you disable the **Pre-process**
 
 
-### 3. Item Looks Dark or Transparent
+### 3. Tree leaves 
+Tree use [billboard](https://www.opengl-tutorial.org/intermediate-tutorials/billboards-particles/billboards/) to render the leaves, so they always face the camera. it looks like it really dislike when the leave square face upward, so always set an angle to the leaves. then do no edge split on the leaves(it appears to be worse). each face should be a quad, and the UV map should be set to the four corners of the 0-1 square.
 
-If your item appears too dark or transparent in-game, the normals are probably inverted.
 
-**Solution:**  
-In Blender, select your mesh, go to **Edit Mode → Mesh → Normals → Recalculate Outside** to fix the normals.
+---
+
+**Still stuck?**   
+- Visit the **Tiny Glade Discord** #modding channel for help.  
+- Check the [Mesh Rendering](https://hbeau.github.io/tiny-docs/game-knowledge/meshes/) page for more technical details.  
