@@ -160,6 +160,11 @@ class ExportTinyGladeJSON(bpy.types.Operator, ExportHelper):
         description="Export bby attribute, normalized y position between 0 and 1",
         default=False
     )
+    include_wing_t: bpy.props.BoolProperty(
+        name="Include Wing T",
+        description="Export wing_t weights as a float attribute",
+        default=False
+    )
     enable_preprocessing: bpy.props.BoolProperty(
         name="Enable Pre-processing",
         description="Enable pre-processing pipeline to apply 'edge split' and 'triangulation' before export." \
@@ -200,6 +205,7 @@ class ExportTinyGladeJSON(bpy.types.Operator, ExportHelper):
             'is_glass': 'include_is_glass',
             'is_tip': 'include_is_tip',
             'bby': 'include_bby',
+            'wing_t': 'include_wing_t',
         }
         
         # Update boolean properties based on required attributes
@@ -232,6 +238,7 @@ class ExportTinyGladeJSON(bpy.types.Operator, ExportHelper):
             'is_glass': 'include_is_glass',
             'is_tip': 'include_is_tip',
             'bby': 'include_bby',
+            'wing_t': 'include_wing_t',
         }
         
         # Update boolean properties based on required attributes
@@ -422,6 +429,7 @@ class ExportTinyGladeJSON(bpy.types.Operator, ExportHelper):
         draw_attribute(subbox, "include_is_glass", "Is Glass", is_attr_required("is_glass"), is_attr_optional("is_glass"), is_manual_mode)
         draw_attribute(subbox, "include_is_tip", "Is Tip", is_attr_required("is_tip"), is_attr_optional("is_tip"), is_manual_mode)
         draw_attribute(subbox, "include_bby", "BBY", is_attr_required("bby"), is_attr_optional("bby"), is_manual_mode)
+        draw_attribute(subbox, "include_wing_t", "Wing T", is_attr_required("wing_t"), is_attr_optional("wing_t"), is_manual_mode)
 
     def execute(self, context):
         self.report({'INFO'}, f"Start Mesh Exportation")
@@ -469,6 +477,9 @@ class ExportTinyGladeJSON(bpy.types.Operator, ExportHelper):
 
             if self.include_bby:
                 self.add_bby(mesh, data)
+
+            if self.include_wing_t:
+                self.add_wing_t(obj, mesh, data)
 
             if self.include_faces_indices:
                 self.add_faces_indices(mesh, data)
@@ -643,6 +654,20 @@ class ExportTinyGladeJSON(bpy.types.Operator, ExportHelper):
             vertex_values = []
         data['bby'] = {'type': ['float', 1], 'buffer': vertex_values}
         data['attributes'].append('bby')
+
+    def add_wing_t(self, obj, mesh, data):
+        """Add wing_t weights from the weight-paint vertex group."""
+        vertex_values = [0.0] * len(mesh.vertices)
+        vertex_group = obj.vertex_groups.get('wing_t')
+        if vertex_group:
+            for index, vertex in enumerate(mesh.vertices):
+                for group in vertex.groups:
+                    if group.group == vertex_group.index:
+                        vertex_values[index] = float(group.weight)
+                        break
+
+        data['wing_t'] = {'type': ['float', 1], 'buffer': vertex_values}
+        data['attributes'].append('wing_t')
     
     def invoke(self, context, event):
         context.window_manager.fileselect_add(self)
