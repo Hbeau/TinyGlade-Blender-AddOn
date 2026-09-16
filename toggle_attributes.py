@@ -87,6 +87,38 @@ class ToggleGlassAttribute(bpy.types.Operator):
         self.report({'INFO'}, "Toggled glass attribute on selected vertices")
         return {'FINISHED'}
 
+class ToggleTipAttribute(bpy.types.Operator):
+    """Toggle is_tip attribute on selected vertices"""
+    bl_idname = "mesh.toggle_tip_attribute"
+    bl_label = "Toggle Tip Attribute"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        obj = context.object
+        if obj is None or obj.type != 'MESH':
+            self.report({'ERROR'}, "Selected object is not a mesh")
+            return {'CANCELLED'}
+        
+        if obj.mode != 'EDIT':
+            self.report({'ERROR'}, "Must be in edit mode")
+            return {'CANCELLED'}
+        
+        mesh = obj.data
+        bm = bmesh.from_edit_mesh(mesh)
+        
+        # Get or create the is_tip attribute
+        tip_attr = mesh.attributes.get('is_tip')
+        if not tip_attr:
+            tip_attr = mesh.attributes.new(name='is_tip', type='INT', domain='POINT')
+        
+        tip_layer = bm.verts.layers.int.get('is_tip')
+        for vert in bm.verts:
+            if vert.select:
+                vert[tip_layer] = 1 if vert[tip_layer] == 0  else 0
+
+        bmesh.update_edit_mesh(mesh)
+        self.report({'INFO'}, "Toggled tip attribute on selected vertices")
+        return {'FINISHED'}
 
 # Toggle Canopy Attribute Operator
 class ToggleCanopyAttribute(bpy.types.Operator):

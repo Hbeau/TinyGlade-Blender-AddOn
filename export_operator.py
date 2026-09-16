@@ -25,6 +25,51 @@ from .mesh_presets import get_preset_manager
 _popover_data = {}
 
 
+def get_mesh_enum_items(scene, context):
+    """Get all available meshes as enum items for search popup"""
+    manager = get_preset_manager()
+    all_meshes = []
+    for preset in manager.get_preset_list():
+        all_meshes.extend(manager.get_meshes_for_preset(preset))
+    mesh_list = sorted(set(all_meshes))
+    return [(mesh, mesh, "") for mesh in mesh_list]
+
+
+# Mesh Search Operator
+class EXPORT_OT_MeshSearch(bpy.types.Operator):
+    """Search and select a mesh from the available meshes"""
+    bl_idname = "export.mesh_search"
+    bl_label = ""
+    bl_property = "selected_mesh"
+
+    selected_mesh: bpy.props.EnumProperty(
+        name="Mesh",
+        description="Select a mesh",
+        items=get_mesh_enum_items
+    )
+
+    def execute(self, context):
+        """Set the selected mesh in the export operator"""
+        # Store in scene for the export operator to pick up
+        context.scene.tiny_glade_selected_mesh = self.selected_mesh
+        
+        # Try to find and update any active export operators
+        for window in context.window_manager.windows:
+            for area in window.screen.areas:
+                if area.type == 'FILE_BROWSER':
+                    for space in area.spaces:
+                        if space.type == 'FILE_BROWSER' and hasattr(space, 'active_operator'):
+                            if space.active_operator and space.active_operator.bl_idname == 'export_scene.tiny_glade_json':
+                                space.active_operator.selected_mesh = self.selected_mesh
+                                space.active_operator.update_attributes_from_mesh_selection(context)
+        return {'FINISHED'}
+
+    def invoke(self, context, event):
+        wm = context.window_manager
+        wm.invoke_search_popup(self)
+        return {'RUNNING_MODAL'}
+
+
 # Popover Panel for Full Mesh List
 class EXPORT_PT_MeshListPopover(bpy.types.Panel):
     """Panel showing the full list of meshes in a popover"""
@@ -85,6 +130,16 @@ class ExportTinyGladeJSON(bpy.types.Operator, ExportHelper):
         description="Export UV map",
         default=False
     )
+    include_bitangent: bpy.props.BoolProperty(
+        name="Include Bitangent",
+        description="Export bitangent vectors",
+        default=False
+    )
+    include_tangent: bpy.props.BoolProperty(
+        name="Include Tangent",
+        description="Export tangent vectors",
+        default=False
+    )
     include_is_metal_part: bpy.props.BoolProperty(
         name="Include Is Metal",
         description="Export is_metal_part attribute, used in doors and trapdoors",
@@ -93,6 +148,16 @@ class ExportTinyGladeJSON(bpy.types.Operator, ExportHelper):
     include_is_glass: bpy.props.BoolProperty(
         name="Include Is Glass",
         description="Export is_glass attribute, usefull for windows",
+        default=False
+    )
+    include_is_tip: bpy.props.BoolProperty(
+        name="Include Is Tip",
+        description="Export is_tip attribute",
+        default=False
+    )
+    include_bby: bpy.props.BoolProperty(
+        name="Include BBY",
+        description="Export bby attribute, normalized y position between 0 and 1",
         default=False
     )
     enable_preprocessing: bpy.props.BoolProperty(
@@ -129,8 +194,12 @@ class ExportTinyGladeJSON(bpy.types.Operator, ExportHelper):
             'Vertex_Color': 'include_vertex_color',
             'Vertex_Normal': 'include_vertex_normal',
             'Vertex_UV': 'include_vertex_uv',
+            'bitangent': 'include_bitangent',
+            'tangent': 'include_tangent',
             'is_metal_part': 'include_is_metal_part',
             'is_glass': 'include_is_glass',
+            'is_tip': 'include_is_tip',
+            'bby': 'include_bby',
         }
         
         # Update boolean properties based on required attributes
@@ -157,8 +226,12 @@ class ExportTinyGladeJSON(bpy.types.Operator, ExportHelper):
             'Vertex_Color': 'include_vertex_color',
             'Vertex_Normal': 'include_vertex_normal',
             'Vertex_UV': 'include_vertex_uv',
+            'bitangent': 'include_bitangent',
+            'tangent': 'include_tangent',
             'is_metal_part': 'include_is_metal_part',
             'is_glass': 'include_is_glass',
+            'is_tip': 'include_is_tip',
+            'bby': 'include_bby',
         }
         
         # Update boolean properties based on required attributes
@@ -166,6 +239,9 @@ class ExportTinyGladeJSON(bpy.types.Operator, ExportHelper):
             if attr in common_attributes:
                 # Required attributes are always checked
                 setattr(self, prop_name, True)
+        
+        # Sync with scene property
+        context.scene.tiny_glade_selected_mesh = self.selected_mesh
 
     selected_preset: bpy.props.EnumProperty(
         name="Shader Type",
@@ -174,12 +250,10 @@ class ExportTinyGladeJSON(bpy.types.Operator, ExportHelper):
         update=update_attributes_from_preset_selection,
     )
     
-    selected_mesh: bpy.props.EnumProperty(
+    selected_mesh: bpy.props.StringProperty(
         name="Mesh Name",
         description="Select meshes",
-        items=get_mesh_items,
         update=update_attributes_from_mesh_selection,
-        default=0,
     )
 
     selector_mode: bpy.props.EnumProperty(
@@ -195,6 +269,10 @@ class ExportTinyGladeJSON(bpy.types.Operator, ExportHelper):
 
     def draw(self, context):
         """Defines the layout in the file browser side panel."""
+        # Sync with scene property if different
+        if hasattr(context.scene, 'tiny_glade_selected_mesh') and context.scene.tiny_glade_selected_mesh != self.selected_mesh:
+            self.selected_mesh = context.scene.tiny_glade_selected_mesh
+        
         layout = self.layout
         
         # Pre-processing section
@@ -218,7 +296,10 @@ class ExportTinyGladeJSON(bpy.types.Operator, ExportHelper):
             box.prop(self, "selected_preset", text="Shader")
             selected_item = self.selected_preset
         elif self.selector_mode == 'MESH':
-            box.prop(self, "selected_mesh", text="Mesh")
+            row = box.row(align=True)
+            current_mesh_name = self.selected_mesh if self.selected_mesh else "(Select Mesh)"
+            # Make it look like a text field but act as a button
+            row.operator("export.mesh_search", text=current_mesh_name, emboss=True)
             selected_item = self.selected_mesh
         else:
             # Manual mode - show selector to switch modes
@@ -334,8 +415,13 @@ class ExportTinyGladeJSON(bpy.types.Operator, ExportHelper):
         draw_attribute(subbox, "include_vertex_color", "Vertex Color", is_attr_required("Vertex_Color"), is_attr_optional("Vertex_Color"), is_manual_mode)
         draw_attribute(subbox, "include_vertex_uv", "UV map", is_attr_required("Vertex_UV"),is_attr_optional("Vertex_UV"), is_manual_mode)
         
+        draw_attribute(subbox, "include_bitangent", "Bitangent", is_attr_required("bitangent"), is_attr_optional("bitangent"), is_manual_mode)
+        draw_attribute(subbox, "include_tangent", "Tangent", is_attr_required("tangent"), is_attr_optional("tangent"), is_manual_mode)
+        
         draw_attribute(subbox, "include_is_metal_part", "Is Metal", is_attr_required("is_metal_part"), is_attr_optional("is_metal_part"), is_manual_mode)
         draw_attribute(subbox, "include_is_glass", "Is Glass", is_attr_required("is_glass"), is_attr_optional("is_glass"), is_manual_mode)
+        draw_attribute(subbox, "include_is_tip", "Is Tip", is_attr_required("is_tip"), is_attr_optional("is_tip"), is_manual_mode)
+        draw_attribute(subbox, "include_bby", "BBY", is_attr_required("bby"), is_attr_optional("bby"), is_manual_mode)
 
     def execute(self, context):
         self.report({'INFO'}, f"Start Mesh Exportation")
@@ -366,11 +452,23 @@ class ExportTinyGladeJSON(bpy.types.Operator, ExportHelper):
             if self.include_vertex_uv:
                 self.add_vertex_UV(mesh, data)
 
+            if self.include_bitangent:
+                self.add_bitangent(mesh, data)
+
+            if self.include_tangent:
+                self.add_tangent(mesh, data)
+
             if self.include_is_metal_part:
                 self.add_is_metal(mesh, data)
 
             if self.include_is_glass:
                 self.add_is_glass(mesh, data)
+
+            if self.include_is_tip:
+                self.add_is_tip(mesh, data)
+
+            if self.include_bby:
+                self.add_bby(mesh, data)
 
             if self.include_faces_indices:
                 self.add_faces_indices(mesh, data)
@@ -458,6 +556,20 @@ class ExportTinyGladeJSON(bpy.types.Operator, ExportHelper):
             data['Vertex_UV'] = {'type': ['float', 2], 'buffer': vertex_uv}
             data['attributes'].append('Vertex_UV')
     
+    def add_bitangent(self, mesh, data):
+        """Add bitangent vectors to the export data."""
+        # Fill with zero vectors for all vertices
+        vertex_bitangents = [[0.0, 0.0, 0.0] for _ in range(len(mesh.vertices))]
+        data['bitangent'] = {'type': ['float', 3], 'buffer': vertex_bitangents}
+        data['attributes'].append('bitangent')
+    
+    def add_tangent(self, mesh, data):
+        """Add tangent vectors to the export data."""
+        # Fill with zero vectors for all vertices
+        vertex_tangents = [[0.0, 0.0, 0.0] for _ in range(len(mesh.vertices))]
+        data['tangent'] = {'type': ['float', 3], 'buffer': vertex_tangents}
+        data['attributes'].append('tangent')
+    
     def add_is_metal(self, mesh, data):
         """Add is_metal attribute to the export data."""
         if 'is_metal_part' in mesh.attributes:
@@ -497,7 +609,42 @@ class ExportTinyGladeJSON(bpy.types.Operator, ExportHelper):
             data['is_glass'] = {'type': ['int', 1], 'buffer': vertex_values}
             data['attributes'].append('is_glass')
     
+    def add_is_tip(self, mesh, data):
+        """Add is_tip attribute to the export data."""
+        if 'is_tip' in mesh.attributes:
+            attr = mesh.attributes['is_tip']
+            vertex_values = [None] * len(mesh.vertices)
+            if attr.domain == 'POINT':
+                for i, item in enumerate(attr.data):
+                    vertex_values[i] = int(item.value)
+            else:
+                for loop_idx, loop in enumerate(mesh.loops):
+                    v_idx = loop.vertex_index
+                    if vertex_values[v_idx] is None:
+                        vertex_values[v_idx] = int(attr.data[loop_idx].value)
+            for i in range(len(vertex_values)):
+                if vertex_values[i] is None:
+                    vertex_values[i] = 0
+            data['is_tip'] = {'type': ['int', 1], 'buffer': vertex_values}
+            data['attributes'].append('is_tip')
+    
+    def add_bby(self, mesh, data):
+        """Add bby attribute to the export data."""
+        # Get all y positions(z in Blender) and normalize to 0-1 range
+        y_positions = [v.co.z for v in mesh.vertices]
+        if y_positions:
+            min_y = min(y_positions)
+            max_y = max(y_positions)
+            if max_y != min_y:
+                vertex_values = [(y - min_y) / (max_y - min_y) for y in y_positions]
+            else:
+                vertex_values = [0.0] * len(mesh.vertices)
+        else:
+            vertex_values = []
+        data['bby'] = {'type': ['float', 1], 'buffer': vertex_values}
+        data['attributes'].append('bby')
+    
     def invoke(self, context, event):
         context.window_manager.fileselect_add(self)
         return {'RUNNING_MODAL'}
-    
+     

@@ -5,6 +5,8 @@
 2. Open Blender go to -> Edit -> Preferences -> Add-ons -> top right arrow down button -> Install from Disk -> select "tiny_glade_blender_add_on1.x.x.zip" -> click "Install from Disk" bottom right
 ## Usage 
 
+the detailed 
+
 * import *JSON* mesh files, there is a new **Import Type** selector in the file browser: choose **Tree** when loading tree files so that the vertex‑color data is split into a UV map (x/y) and a canopy flag (z).  
 *Note:* the file format uses **1 = trunk, 0 = canopy**; the add‑on automatically flips this to the internal canopy flag.  
 
@@ -13,9 +15,8 @@
   
 * You can also export .JSON Files as the Tiny Glade Format. select the according pipeline normal or tree, and check the according checkbox to match the input file.
 
-## here is an old video showing the add on: [YouTube](https://youtu.be/l3bbmhv0Qi0)
+
+> here is an old video showing the add on: [YouTube](https://youtu.be/l3bbmhv0Qi0)
 
 ## questions?
-I m always around the Tiny Glade Discord, fell free to ask @Rapunzilla if you have any questions or suggestions 
-
-## Try the Tiny Glade [3D Model Viewer](https://github.com/FlazeIGuess/tinyglade-3dmodel-viewer/tree/master)
+I'm always around the Tiny Glade Discord, fell free to ask @Rapunzilla if you have any questions or suggestions 

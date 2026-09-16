@@ -53,6 +53,7 @@ class ImportTinyGladeJSON(bpy.types.Operator, ImportHelper):
         appear_pos = np.array([flip_vector_orientation(Vector(v)) for v in data.get("appear_pos",{}).get("buffer", [])])
         is_metal = data.get("is_metal_part",{}).get("buffer", [])
         is_glass = data.get("is_glass",{}).get("buffer", [])
+        is_tip = data.get("is_tip",{}).get("buffer", [])
         # Create a new mesh and object
         objectName = self.filepath.split("\\")[-1].split(".")[0]
         mesh = bpy.data.meshes.new("TinyGladeMesh")
@@ -133,6 +134,11 @@ class ImportTinyGladeJSON(bpy.types.Operator, ImportHelper):
         if is_glass:
             glass_attr = obj.data.attributes.new(name='is_glass', type='INT', domain='POINT')
             for i, val in enumerate(is_glass):
+                glass_attr.data[i].value = int(val)
+        
+        if is_tip:
+            glass_attr = obj.data.attributes.new(name='is_tip', type='INT', domain='POINT')
+            for i, val in enumerate(is_tip):
                 glass_attr.data[i].value = int(val)
         
         return {'FINISHED'}

@@ -25,6 +25,7 @@ from . import mesh_presets
 def menu_func_vertex(self, context):
     self.layout.operator(toggle_attributes.ToggleMetalAttribute.bl_idname, text="Toggle Metal")
     self.layout.operator(toggle_attributes.ToggleGlassAttribute.bl_idname, text="Toggle Glass")
+    self.layout.operator(toggle_attributes.ToggleTipAttribute.bl_idname, text="Toggle Tip")
     self.layout.operator(toggle_attributes.ToggleCanopyAttribute.bl_idname, text="Toggle Canopy")
     self.layout.operator(generate_meshes.GenerateAppearPosMesh.bl_idname, text="Generate Appear Pos Mesh")
     self.layout.operator(generate_meshes.GeneratePrimCenterMesh.bl_idname, text="Generate Prim Center Mesh")
@@ -52,18 +53,24 @@ def register():
     # Register addon preferences first
     bpy.utils.register_class(addon_preferences.TinyGladeAddonPreferences)
     
+    bpy.types.Scene.tiny_glade_selected_mesh = bpy.props.StringProperty(
+        name="Selected Mesh",
+        description="Currently selected mesh for export",
+        default=""
+    )
     bpy.types.Scene.show_material_overlay = bpy.props.BoolProperty(
         name="Material Attributes",
         description="Show material attributes overlay on active mesh",
         default=False,
-        update=overlay.update_show_overlay_scene
-    )
+        update=overlay.update_show_overlay_scene)
     bpy.utils.register_class(export_operator.EXPORT_PT_MeshListPopover)
+    bpy.utils.register_class(export_operator.EXPORT_OT_MeshSearch)
     bpy.utils.register_class(import_operator.ImportTinyGladeJSON)
     bpy.utils.register_class(export_operator.ExportTinyGladeJSON)
     bpy.utils.register_class(tree_export_operator.ExportTinyGladeTreeJSON)
     bpy.utils.register_class(toggle_attributes.ToggleMetalAttribute)
     bpy.utils.register_class(toggle_attributes.ToggleGlassAttribute)
+    bpy.utils.register_class(toggle_attributes.ToggleTipAttribute)
     bpy.utils.register_class(toggle_attributes.ToggleCanopyAttribute)
     bpy.utils.register_class(generate_meshes.GenerateAppearPosMesh)
     bpy.utils.register_class(generate_meshes.GeneratePrimCenterMesh)
@@ -94,12 +101,14 @@ def unregister():
     bpy.types.TOPBAR_MT_file_import.remove(menu_func_import)
     bpy.types.TOPBAR_MT_file_export.remove(menu_func_export)
     bpy.utils.unregister_class(export_operator.EXPORT_PT_MeshListPopover)
+    bpy.utils.unregister_class(export_operator.EXPORT_OT_MeshSearch)
     bpy.utils.unregister_class(import_operator.ImportTinyGladeJSON)
     bpy.utils.unregister_class(export_operator.ExportTinyGladeJSON)
     bpy.utils.unregister_class(tree_export_operator.ExportTinyGladeTreeJSON)
     bpy.utils.unregister_class(toggle_attributes.ToggleMetalAttribute)
     bpy.utils.unregister_class(toggle_attributes.ToggleGlassAttribute)
     bpy.utils.unregister_class(toggle_attributes.ToggleCanopyAttribute)
+    bpy.utils.unregister_class(toggle_attributes.ToggleTipAttribute)
     bpy.utils.unregister_class(generate_meshes.GenerateAppearPosMesh)
     bpy.utils.unregister_class(generate_meshes.GeneratePrimCenterMesh)
     bpy.utils.unregister_class(addon_preferences.TinyGladeAddonPreferences)
