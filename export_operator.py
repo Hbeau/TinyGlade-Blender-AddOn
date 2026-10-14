@@ -17,8 +17,14 @@ import json
 import bmesh
 from mathutils import Vector
 from bpy_extras.io_utils import ExportHelper
-from .utils import flip_vector_orientation, pre_export_pipeline, vertex_positions_data, vertex_normals_data, faces_indices_data, apply_edge_split
+from .utils import pre_export_pipeline, vertex_positions_data, vertex_normals_data, faces_indices_data
 from .mesh_presets import get_preset_manager
+from .scalar_attributes import (
+    ScalarGroupSelectionItem,
+    add_vertex_group_buffer,
+    draw_scalar_group_selection,
+    sync_scalar_group_selection,
+)
 
 
 # Global storage for popover data (workaround for context.scene limitation during drawing)
@@ -140,31 +146,7 @@ class ExportTinyGladeJSON(bpy.types.Operator, ExportHelper):
         description="Export tangent vectors",
         default=False
     )
-    include_is_metal_part: bpy.props.BoolProperty(
-        name="Include Is Metal",
-        description="Export is_metal_part attribute, used in doors and trapdoors",
-        default=False
-    )
-    include_is_glass: bpy.props.BoolProperty(
-        name="Include Is Glass",
-        description="Export is_glass attribute, usefull for windows",
-        default=False
-    )
-    include_is_tip: bpy.props.BoolProperty(
-        name="Include Is Tip",
-        description="Export is_tip attribute",
-        default=False
-    )
-    include_bby: bpy.props.BoolProperty(
-        name="Include BBY",
-        description="Export bby attribute, normalized y position between 0 and 1",
-        default=False
-    )
-    include_wing_t: bpy.props.BoolProperty(
-        name="Include Wing T",
-        description="Export wing_t weights as a float attribute",
-        default=False
-    )
+    scalar_groups: bpy.props.CollectionProperty(type=ScalarGroupSelectionItem)
     enable_preprocessing: bpy.props.BoolProperty(
         name="Enable Pre-processing",
         description="Enable pre-processing pipeline to apply 'edge split' and 'triangulation' before export." \
@@ -201,11 +183,6 @@ class ExportTinyGladeJSON(bpy.types.Operator, ExportHelper):
             'Vertex_UV': 'include_vertex_uv',
             'bitangent': 'include_bitangent',
             'tangent': 'include_tangent',
-            'is_metal_part': 'include_is_metal_part',
-            'is_glass': 'include_is_glass',
-            'is_tip': 'include_is_tip',
-            'bby': 'include_bby',
-            'wing_t': 'include_wing_t',
         }
         
         # Update boolean properties based on required attributes
@@ -234,11 +211,6 @@ class ExportTinyGladeJSON(bpy.types.Operator, ExportHelper):
             'Vertex_UV': 'include_vertex_uv',
             'bitangent': 'include_bitangent',
             'tangent': 'include_tangent',
-            'is_metal_part': 'include_is_metal_part',
-            'is_glass': 'include_is_glass',
-            'is_tip': 'include_is_tip',
-            'bby': 'include_bby',
-            'wing_t': 'include_wing_t',
         }
         
         # Update boolean properties based on required attributes
@@ -425,11 +397,33 @@ class ExportTinyGladeJSON(bpy.types.Operator, ExportHelper):
         draw_attribute(subbox, "include_bitangent", "Bitangent", is_attr_required("bitangent"), is_attr_optional("bitangent"), is_manual_mode)
         draw_attribute(subbox, "include_tangent", "Tangent", is_attr_required("tangent"), is_attr_optional("tangent"), is_manual_mode)
         
-        draw_attribute(subbox, "include_is_metal_part", "Is Metal", is_attr_required("is_metal_part"), is_attr_optional("is_metal_part"), is_manual_mode)
-        draw_attribute(subbox, "include_is_glass", "Is Glass", is_attr_required("is_glass"), is_attr_optional("is_glass"), is_manual_mode)
-        draw_attribute(subbox, "include_is_tip", "Is Tip", is_attr_required("is_tip"), is_attr_optional("is_tip"), is_manual_mode)
-        draw_attribute(subbox, "include_bby", "BBY", is_attr_required("bby"), is_attr_optional("bby"), is_manual_mode)
-        draw_attribute(subbox, "include_wing_t", "Wing T", is_attr_required("wing_t"), is_attr_optional("wing_t"), is_manual_mode)
+        obj = context.object
+        if is_manual_mode:
+            if obj and obj.type == 'MESH':
+                sync_scalar_group_selection(
+                    self, obj, default_selected=True,
+                    preserve_attribute_names=True,
+                )
+                draw_scalar_group_selection(
+                    subbox, self, obj, editable_attribute_names=True
+                )
+        else:
+            scalar_geometry_names = {
+                "Vertex_Position", "Vertex_Normal", "Vertex_Color", "Vertex_UV",
+                "bitangent", "tangent", "indices",
+            }
+            scalar_names = [
+                name for name in dict.fromkeys(common_attributes + optional_attributes)
+                if name not in scalar_geometry_names
+            ]
+            required_scalars = set(common_attributes) - scalar_geometry_names
+            if obj and obj.type == 'MESH':
+                sync_scalar_group_selection(
+                    self, obj, scalar_names, required_scalars
+                )
+                draw_scalar_group_selection(
+                    subbox, self, obj, scalar_names, required_scalars
+                )
 
     def execute(self, context):
         self.report({'INFO'}, f"Start Mesh Exportation")
@@ -466,20 +460,14 @@ class ExportTinyGladeJSON(bpy.types.Operator, ExportHelper):
             if self.include_tangent:
                 self.add_tangent(mesh, data)
 
-            if self.include_is_metal_part:
-                self.add_is_metal(mesh, data)
-
-            if self.include_is_glass:
-                self.add_is_glass(mesh, data)
-
-            if self.include_is_tip:
-                self.add_is_tip(mesh, data)
-
-            if self.include_bby:
-                self.add_bby(mesh, data)
-
-            if self.include_wing_t:
-                self.add_wing_t(obj, mesh, data)
+            for item in self.scalar_groups:
+                if not item.selected or not item.name:
+                    continue
+                group = obj.vertex_groups.get(item.group_name)
+                if group:
+                    add_vertex_group_buffer(
+                        obj, mesh, group, data, item.name
+                    )
 
             if self.include_faces_indices:
                 self.add_faces_indices(mesh, data)
@@ -581,95 +569,14 @@ class ExportTinyGladeJSON(bpy.types.Operator, ExportHelper):
         data['tangent'] = {'type': ['float', 3], 'buffer': vertex_tangents}
         data['attributes'].append('tangent')
     
-    def add_is_metal(self, mesh, data):
-        """Add is_metal attribute to the export data."""
-        if 'is_metal_part' in mesh.attributes:
-            attr = mesh.attributes['is_metal_part']
-            # Map corner data to first-seen per-vertex if needed
-            vertex_values = [None] * len(mesh.vertices)
-            if attr.domain == 'POINT':
-                for i, item in enumerate(attr.data):
-                    vertex_values[i] = int(item.value)
-            else:
-                for loop_idx, loop in enumerate(mesh.loops):
-                    v_idx = loop.vertex_index
-                    if vertex_values[v_idx] is None:
-                        vertex_values[v_idx] = int(attr.data[loop_idx].value)
-            for i in range(len(vertex_values)):
-                if vertex_values[i] is None:
-                    vertex_values[i] = 0
-            data['is_metal_part'] = {'type': ['int', 1], 'buffer': vertex_values}
-            data['attributes'].append('is_metal_part')
-    
-    def add_is_glass(self, mesh, data):
-        """Add is_glass attribute to the export data."""
-        if 'is_glass' in mesh.attributes:
-            attr = mesh.attributes['is_glass']
-            vertex_values = [None] * len(mesh.vertices)
-            if attr.domain == 'POINT':
-                for i, item in enumerate(attr.data):
-                    vertex_values[i] = int(item.value)
-            else:
-                for loop_idx, loop in enumerate(mesh.loops):
-                    v_idx = loop.vertex_index
-                    if vertex_values[v_idx] is None:
-                        vertex_values[v_idx] = int(attr.data[loop_idx].value)
-            for i in range(len(vertex_values)):
-                if vertex_values[i] is None:
-                    vertex_values[i] = 0
-            data['is_glass'] = {'type': ['int', 1], 'buffer': vertex_values}
-            data['attributes'].append('is_glass')
-    
-    def add_is_tip(self, mesh, data):
-        """Add is_tip attribute to the export data."""
-        if 'is_tip' in mesh.attributes:
-            attr = mesh.attributes['is_tip']
-            vertex_values = [None] * len(mesh.vertices)
-            if attr.domain == 'POINT':
-                for i, item in enumerate(attr.data):
-                    vertex_values[i] = int(item.value)
-            else:
-                for loop_idx, loop in enumerate(mesh.loops):
-                    v_idx = loop.vertex_index
-                    if vertex_values[v_idx] is None:
-                        vertex_values[v_idx] = int(attr.data[loop_idx].value)
-            for i in range(len(vertex_values)):
-                if vertex_values[i] is None:
-                    vertex_values[i] = 0
-            data['is_tip'] = {'type': ['int', 1], 'buffer': vertex_values}
-            data['attributes'].append('is_tip')
-    
-    def add_bby(self, mesh, data):
-        """Add bby attribute to the export data."""
-        # Get all y positions(z in Blender) and normalize to 0-1 range
-        y_positions = [v.co.z for v in mesh.vertices]
-        if y_positions:
-            min_y = min(y_positions)
-            max_y = max(y_positions)
-            if max_y != min_y:
-                vertex_values = [(y - min_y) / (max_y - min_y) for y in y_positions]
-            else:
-                vertex_values = [0.0] * len(mesh.vertices)
-        else:
-            vertex_values = []
-        data['bby'] = {'type': ['float', 1], 'buffer': vertex_values}
-        data['attributes'].append('bby')
-
-    def add_wing_t(self, obj, mesh, data):
-        """Add wing_t weights from the weight-paint vertex group."""
-        vertex_values = [0.0] * len(mesh.vertices)
-        vertex_group = obj.vertex_groups.get('wing_t')
-        if vertex_group:
-            for index, vertex in enumerate(mesh.vertices):
-                for group in vertex.groups:
-                    if group.group == vertex_group.index:
-                        vertex_values[index] = float(group.weight)
-                        break
-
-        data['wing_t'] = {'type': ['float', 1], 'buffer': vertex_values}
-        data['attributes'].append('wing_t')
-    
     def invoke(self, context, event):
+        obj = context.object
+        if obj and obj.type == 'MESH':
+            if self.selector_mode == 'MANUAL':
+                sync_scalar_group_selection(
+                    self, obj, default_selected=True,
+                    preserve_attribute_names=True,
+                )
         context.window_manager.fileselect_add(self)
         return {'RUNNING_MODAL'}
      

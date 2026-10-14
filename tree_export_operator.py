@@ -16,6 +16,12 @@ import numpy as np
 import json
 from bpy_extras.io_utils import ExportHelper
 from .utils import flip_vector_orientation, pre_export_pipeline, vertex_positions_data, vertex_normals_data, faces_indices_data, apply_edge_split
+from .scalar_attributes import (
+    ScalarGroupSelectionItem,
+    add_vertex_group_buffer,
+    draw_scalar_group_selection,
+    sync_scalar_group_selection,
+)
 
 
 # Export Operator (Tree-specific)
@@ -52,6 +58,7 @@ class ExportTinyGladeTreeJSON(bpy.types.Operator, ExportHelper):
         min=0.0,
         max=1.0
     )
+    scalar_groups: bpy.props.CollectionProperty(type=ScalarGroupSelectionItem)
 
     def execute(self, context):
         self.report({'INFO'}, "Start Tree Mesh Exportation")
@@ -71,7 +78,7 @@ class ExportTinyGladeTreeJSON(bpy.types.Operator, ExportHelper):
             self.add_vertex_positions(obj, mesh, data)
             self.add_vertex_normals(mesh, data)
             # Tree-specific vertex colors (placeholder; tree logic differs)
-            self.add_tree_vertex_colors(mesh, data)
+            self.add_tree_vertex_colors(obj, mesh, data)
 
             # appear_pos: tree-specific handler (may use meta if available)
             self.add_appear_pos(data)
@@ -79,8 +86,18 @@ class ExportTinyGladeTreeJSON(bpy.types.Operator, ExportHelper):
             # prim_center: compute primitive/face centers for this mesh
             self.add_prim_center(data)
 
+            scalar_names = {
+                item.name for item in self.scalar_groups if item.selected
+            }
+            for item in self.scalar_groups:
+                if not item.selected or item.name == 'is_canopy' or not item.name:
+                    continue
+                group = obj.vertex_groups.get(item.group_name)
+                if group:
+                    add_vertex_group_buffer(obj, mesh, group, data, item.name)
+
             # age: add age attribute if flag is set
-            if self.age_enable:
+            if self.age_enable and 'age' not in scalar_names:
                 self.add_age(mesh, data)
 
             # Also include indices for geometry consumers
@@ -123,7 +140,7 @@ class ExportTinyGladeTreeJSON(bpy.types.Operator, ExportHelper):
         }
         data['attributes'].append('Vertex_Normal')
 
-    def add_tree_vertex_colors(self, mesh, data):
+    def add_tree_vertex_colors(self, obj, mesh, data):
         """Export the special tree encoding.
 
         For tree meshes we pack the per-vertex UV (stored on the mesh as the
@@ -147,18 +164,15 @@ class ExportTinyGladeTreeJSON(bpy.types.Operator, ExportHelper):
         if uv_coords is None:
             uv_coords = [(0.0, 0.0)] * len(mesh.vertices)
 
-        # gather canopy flag from attribute if available
+        # Gather the canopy flag from its vertex group if available.
         canopy_values = [0] * len(mesh.vertices)
-        if 'is_canopy' in mesh.attributes:
-            attr = mesh.attributes['is_canopy']
-            if attr.domain == 'POINT':
-                for i, item in enumerate(attr.data):
-                    canopy_values[i] = int(item.value)
-            else:
-                for loop_idx, loop in enumerate(mesh.loops):
-                    v_idx = loop.vertex_index
-                    if canopy_values[v_idx] == 0:
-                        canopy_values[v_idx] = int(attr.data[loop_idx].value)
+        canopy_group = obj.vertex_groups.get('is_canopy')
+        if canopy_group:
+            for index, vertex in enumerate(mesh.vertices):
+                for assignment in vertex.groups:
+                    if assignment.group == canopy_group.index:
+                        canopy_values[index] = int(assignment.weight >= 0.5)
+                        break
 
         # build color buffer using uv + canopy
         vertex_colors = []
@@ -210,6 +224,12 @@ class ExportTinyGladeTreeJSON(bpy.types.Operator, ExportHelper):
         data['attributes'].append('age')
 
     def invoke(self, context, event):
+        obj = context.object
+        if obj and obj.type == 'MESH':
+            sync_scalar_group_selection(
+                self, obj, default_selected=True,
+                preserve_attribute_names=True,
+            )
         context.window_manager.fileselect_add(self)
         return {'RUNNING_MODAL'}
     def draw(self, context):
@@ -223,3 +243,19 @@ class ExportTinyGladeTreeJSON(bpy.types.Operator, ExportHelper):
         layout.prop(self, "age_enable", text="Include Age Attribute")
         if self.age_enable:
             layout.prop(self, "age")
+        obj = context.object
+        if obj and obj.type == 'MESH':
+            sync_scalar_group_selection(
+                self, obj,
+                attribute_names=[
+                    group.name for group in obj.vertex_groups
+                    if group.name != 'is_canopy'
+                ],
+                default_selected=True,
+                preserve_attribute_names=True,
+            )
+            draw_scalar_group_selection(
+                layout, self, obj,
+                allowed_names={item.name for item in self.scalar_groups},
+                editable_attribute_names=True,
+            )

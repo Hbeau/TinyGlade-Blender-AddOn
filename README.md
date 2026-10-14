@@ -30,7 +30,7 @@
 Your object will appear in Blender as with it name like  **"lantern_terrain"**.
 
 ### **Supported features:**
-The **Normal Mesh**(well named in oppostion of tree mesh) import support most of the attribute : `Vertex_Position` , `Vertex_Color`, `Vertex_Normal`, `UV_map` and flags like `is_metal_part`, `is_glass` and `is_tip`
+The **Normal Mesh** import supports geometry attributes such as `Vertex_Position`, `Vertex_Color`, `Vertex_Normal` and `Vertex_UV`. Every one-component attribute is imported as a vertex group named after that attribute (for example `is_metal_part`, `is_glass`, `is_tip` or `is_wing`).
 that's include every decorator, every clutter and most of the static meshes.  
 !!! info
     Birds and ducks are not yet supported. you can still import them but some feature will be missing
@@ -48,7 +48,7 @@ The export tool will guide you in the export and ddo a lot of work for you. To e
 1. Select your object in **Object Mode**.
 2. Go to **File → Export → Tiny Glade JSON (.json)**.
 3. Choose a file name matching the asset you want to replace.
-4. Select in the right panel the export settings
+4. Select in the right panel the export settings. One-component attributes are exported from same-named vertex groups; in manual mode, choose which groups to include.
   a. the pre-process pipeline will do a bunch of operation for you : apply modifiers,split edges, triangulate. leave it enable unless you know what you are doing
   b. select a shader or a specific mesh to load the preset of attributes to export.if you're brave enough, use the manual option to select attributes by yourself.
 5. Click on the export button and get your file 🎉

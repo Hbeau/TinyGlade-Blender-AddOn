@@ -17,6 +17,7 @@ import json
 from mathutils import Vector
 from bpy_extras.io_utils import ImportHelper
 from .utils import flip_vector_orientation
+from .scalar_attributes import add_scalar_vertex_groups
 
 
 # Import Operator
@@ -51,9 +52,6 @@ class ImportTinyGladeJSON(bpy.types.Operator, ImportHelper):
         faces = [indices[i:i+3] for i in range(0, len(indices), 3)]
         prim_center = np.array([flip_vector_orientation(Vector(v)) for v in data.get("prim_center",{}).get("buffer", [])])
         appear_pos = np.array([flip_vector_orientation(Vector(v)) for v in data.get("appear_pos",{}).get("buffer", [])])
-        is_metal = data.get("is_metal_part",{}).get("buffer", [])
-        is_glass = data.get("is_glass",{}).get("buffer", [])
-        is_tip = data.get("is_tip",{}).get("buffer", [])
         # Create a new mesh and object
         objectName = self.filepath.split("\\")[-1].split(".")[0]
         mesh = bpy.data.meshes.new("TinyGladeMesh")
@@ -96,10 +94,9 @@ class ImportTinyGladeJSON(bpy.types.Operator, ImportHelper):
                     vertex_idx = mesh.loops[loop_idx].vertex_index
                     uv_layer[loop_idx].uv = uv_data[vertex_idx]
 
-            # store canopy flag in a new point attribute
-            canopy_attr = obj.data.attributes.new(name='is_canopy', type='INT', domain='POINT')
+            canopy_group = obj.vertex_groups.new(name='is_canopy')
             for i, val in enumerate(canopy_data):
-                canopy_attr.data[i].value = val
+                canopy_group.add([i], float(val), 'REPLACE')
 
         elif vertex_colors:
             # standard color import path
@@ -125,21 +122,7 @@ class ImportTinyGladeJSON(bpy.types.Operator, ImportHelper):
                     uv_layer[loop_idx].uv = vertex_UV[vertex_idx]
         mesh.update()
         
-        # Add custom attributes for material flags
-        if is_metal:
-            metal_attr = obj.data.attributes.new(name='is_metal_part', type='INT', domain='POINT')
-            for i, val in enumerate(is_metal):
-                metal_attr.data[i].value = int(val)
-        
-        if is_glass:
-            glass_attr = obj.data.attributes.new(name='is_glass', type='INT', domain='POINT')
-            for i, val in enumerate(is_glass):
-                glass_attr.data[i].value = int(val)
-        
-        if is_tip:
-            glass_attr = obj.data.attributes.new(name='is_tip', type='INT', domain='POINT')
-            for i, val in enumerate(is_tip):
-                glass_attr.data[i].value = int(val)
+        add_scalar_vertex_groups(obj, data)
         
         return {'FINISHED'}
 
