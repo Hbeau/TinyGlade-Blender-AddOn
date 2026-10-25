@@ -19,7 +19,7 @@ from .utils import flip_vector_orientation, pre_export_pipeline, vertex_position
 
 # Generate Appear Pos Mesh Operator
 class GenerateAppearPosMesh(bpy.types.Operator):
-    """Generate a mesh with vertices at appear positions from the selected mesh"""
+    """Generate a mesh with the selected mesh's vertex positions"""
     bl_idname = "mesh.generate_appear_pos_mesh"
     bl_label = "Generate Appear Pos Mesh"
     bl_options = {'REGISTER', 'UNDO'}
@@ -31,28 +31,7 @@ class GenerateAppearPosMesh(bpy.types.Operator):
             return {'CANCELLED'}
         
         temp_obj, obj_eval, eval_mesh = apply_edge_split(context, obj)
-        
-        # Compute appear_pos: per vertex, center of first linked face
-        appear_pos = [None] * len(eval_mesh.vertices)
-        bm = bmesh.new()
-        bm.from_mesh(eval_mesh)
-        print("Generating appear_pos mesh from evaluated mesh with", len(bm.verts), "vertices")
-        for vert in bm.verts:
-            if vert.link_faces is None or len(vert.link_faces) == 0:
-                print(f"Vertex {vert.index} has no linked faces, using vertex position as appear_pos")
-                center = vert.co
-                appear_pos[vert.index] = (center.x, center.y, center.z)
-            else:
-                for face in vert.link_faces:
-                    print(f"Processing vertex {vert.index} with linked face {face.index}")
-                    if face is None:
-                        center = vert.co
-                        appear_pos[vert.index] = (center.x, center.y, center.z)
-                    else:
-                        center = face.calc_center_median()
-                    appear_pos[vert.index] = (center.x, center.y, center.z)
-                    break
-        bm.free()
+        appear_pos = [(v.co.x, v.co.y, v.co.z) for v in eval_mesh.vertices]
 
         
         # Clean up temporary object and its data
@@ -63,7 +42,6 @@ class GenerateAppearPosMesh(bpy.types.Operator):
                 pass
         
         bpy.data.objects.remove(temp_obj)
-        print("appear_pos data:", appear_pos)
         # Create new mesh and object for appear_pos
         appear_mesh = bpy.data.meshes.new("AppearPosMesh")
         appear_mesh.from_pydata(appear_pos, [], [])
@@ -77,7 +55,7 @@ class GenerateAppearPosMesh(bpy.types.Operator):
 
 # Generate Prim Center Mesh Operator
 class GeneratePrimCenterMesh(bpy.types.Operator):
-    """Generate a mesh with vertices duplicating the vertex positions of the selected mesh (after modifiers)"""
+    """Generate a mesh with each vertex at the center of one of its linked faces"""
     bl_idname = "mesh.generate_prim_center_mesh"
     bl_label = "Generate Prim Center Mesh"
     bl_options = {'REGISTER', 'UNDO'}
@@ -89,9 +67,14 @@ class GeneratePrimCenterMesh(bpy.types.Operator):
             return {'CANCELLED'}
         
         temp_obj, obj_eval, eval_mesh = apply_edge_split(context, obj)
-        
-        # Get vertex positions (local, without world matrix or flip, as they will be exported without transformation)
-        vertex_positions = [(v.co.x, v.co.y, v.co.z) for v in eval_mesh.vertices]
+
+        bm = bmesh.new()
+        bm.from_mesh(eval_mesh)
+        prim_center = [None] * len(bm.verts)
+        for vert in bm.verts:
+            center = vert.link_faces[0].calc_center_median() if vert.link_faces else vert.co
+            prim_center[vert.index] = (center.x, center.y, center.z)
+        bm.free()
         
         # Clean up temporary object and its data
         if hasattr(obj_eval, "to_mesh_clear"):
@@ -104,7 +87,7 @@ class GeneratePrimCenterMesh(bpy.types.Operator):
         
         # Create new mesh and object for prim_center
         prim_mesh = bpy.data.meshes.new("PrimCenterMesh")
-        prim_mesh.from_pydata(vertex_positions, [], [])
+        prim_mesh.from_pydata(prim_center, [], [])
         prim_obj = bpy.data.objects.new("PrimCenterObject", prim_mesh)
         bpy.context.collection.objects.link(prim_obj)
         prim_mesh.update()

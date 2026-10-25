@@ -50,6 +50,26 @@ class ImportTinyGladeJSON(bpy.types.Operator, ImportHelper):
         vertex_UV = data.get("Vertex_UV",{}).get("buffer", [])
         indices = data.get("indices",{}).get("buffer", [])
         faces = [indices[i:i+3] for i in range(0, len(indices), 3)]
+        if len(vertex_normals) == len(vertex_positions):
+            for face in faces:
+                if len(face) != 3:
+                    continue
+
+                positions = [Vector(vertex_positions[index]) for index in face]
+                face_normal = (positions[1] - positions[0]).cross(
+                    positions[2] - positions[0]
+                )
+                vertex_normal = sum(
+                    (Vector(vertex_normals[index]) for index in face),
+                    Vector(),
+                )
+                if (
+                    face_normal.length_squared > 0
+                    and vertex_normal.length_squared > 0
+                    and face_normal.dot(vertex_normal) < 0
+                ):
+                    face.reverse()
+
         prim_center = np.array([flip_vector_orientation(Vector(v)) for v in data.get("prim_center",{}).get("buffer", [])])
         appear_pos = np.array([flip_vector_orientation(Vector(v)) for v in data.get("appear_pos",{}).get("buffer", [])])
         # Create a new mesh and object
@@ -69,10 +89,6 @@ class ImportTinyGladeJSON(bpy.types.Operator, ImportHelper):
             appear_pos_mesh.from_pydata(appear_pos, [], [])
         # Assign geometry to mesh
         mesh.from_pydata(vertex_positions, [], faces)
-        mesh.flip_normals()
-        # if vertex_normals.size > 0:
-         # mesh.normals_split_custom_set(vertex_normals)
-
         # --- handle vertex colors differently when importing trees ---
         if vertex_colors and self.import_type == 'TREE':
             # For tree files the color buffer encodes a UV in x/y and a canopy flag in z

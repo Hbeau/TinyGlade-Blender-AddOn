@@ -22,8 +22,8 @@ from . import mesh_presets
 from . import scalar_attributes
 
 def menu_func_vertex(self, context):
-    self.layout.operator(generate_meshes.GenerateAppearPosMesh.bl_idname, text="Generate Appear Pos Mesh")
     self.layout.operator(generate_meshes.GeneratePrimCenterMesh.bl_idname, text="Generate Prim Center Mesh")
+    self.layout.operator(generate_meshes.GenerateAppearPosMesh.bl_idname, text="Generate Appear Pos Mesh")
 
 def menu_func_import(self, context):
     self.layout.operator(import_operator.ImportTinyGladeJSON.bl_idname, text="Tiny Glade JSON (.json)")

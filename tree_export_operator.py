@@ -10,7 +10,7 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
-
+from mathutils import Vector
 import bpy
 import numpy as np
 import json
@@ -70,7 +70,7 @@ class ExportTinyGladeTreeJSON(bpy.types.Operator, ExportHelper):
            self.filepath += obj.name + self.filename_ext
 
         # Prepare mesh and metadata
-        mesh = pre_export_pipeline(context, obj)
+        mesh = obj.data
         data = {'attributes': []}
 
         try:
@@ -195,7 +195,8 @@ class ExportTinyGladeTreeJSON(bpy.types.Operator, ExportHelper):
             source_obj = bpy.data.objects[self.appear_pos_source_mesh]
             if source_obj and source_obj.type == 'MESH':
                 # Export vertex positions without transformation
-                appear_pos = [(v.co.x, v.co.y, v.co.z) for v in source_obj.data.vertices]
+                vertices = [Vector(source_obj.matrix_world @ vertex.co) for vertex in source_obj.data.vertices]
+                appear_pos = [tuple(flip_vector_orientation(v)) for v in vertices]
                 data['appear_pos'] = {'type': ['float', 3], 'buffer': appear_pos}
                 data['attributes'].append('appear_pos')
         except KeyError:
@@ -209,7 +210,8 @@ class ExportTinyGladeTreeJSON(bpy.types.Operator, ExportHelper):
             source_obj = bpy.data.objects[self.prim_center_source_mesh]
             if source_obj and source_obj.type == 'MESH':
                 # Export vertex positions without transformation
-                prim_center = [(v.co.x, v.co.y, v.co.z) for v in source_obj.data.vertices]
+                vertices = [Vector(source_obj.matrix_world @ vertex.co) for vertex in source_obj.data.vertices]
+                prim_center = [tuple(flip_vector_orientation(v)) for v in vertices]
                 data['prim_center'] = {'type': ['float', 3], 'buffer': prim_center}
                 data['attributes'].append('prim_center')
         except KeyError:
